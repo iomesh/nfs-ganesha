@@ -981,6 +981,7 @@ struct nfs4_recovery_backend {
 void fs_backend_init(struct nfs4_recovery_backend **);
 void fs_ng_backend_init(struct nfs4_recovery_backend **);
 int load_recovery_param_from_conf(config_file_t, struct config_error_type *);
+void sfs_cluster_backend_init(struct nfs4_recovery_backend **);
 
 #endif				/* SAL_FUNCTIONS_H */
 
