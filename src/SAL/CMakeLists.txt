@@ -37,7 +37,10 @@ SET(sal_STAT_SRCS
    nfs4_owner.c
    recovery/recovery_fs.c
    recovery/recovery_fs_ng.c
+   recovery/recovery_sfs_cluster.c
 )
+
+include_directories(${SFS_INCLUDE_DIR})
 
 if(USE_NLM)
   set(sal_STAT_SRCS
