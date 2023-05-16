@@ -190,6 +190,8 @@ target_link_libraries(ganesha_nfsd
   ${SYSTEM_LIBRARIES}
   ${LTTNG_LIBRARIES}
   ${MOOSHIKA_LIBRARIES}
+  sfs_recovery_backend
+  -L${PATH_LIBSFS}
 )
 
 if(SANITIZE_ADDRESS)

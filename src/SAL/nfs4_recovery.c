@@ -31,6 +31,7 @@
  */
 
 #include "config.h"
+#include "gsh_config.h"
 #include "log.h"
 #include "nfs_core.h"
 #include "nfs4.h"
@@ -764,6 +765,9 @@ static int load_rados_recov(void)
 }
 #endif
 
+extern int sfs_load_config_from_parse(config_file_t parse_tree,
+				 struct config_error_type *err_type);
+
 const char *recovery_backend_str(enum recovery_backend recovery_backend)
 {
 	switch (recovery_backend) {
@@ -777,6 +781,8 @@ const char *recovery_backend_str(enum recovery_backend recovery_backend)
 		return "rados_ng";
 	case RECOVERY_BACKEND_RADOS_CLUSTER:
 		return "rados_cluster";
+	case RECOVERY_BACKEND_SFS_CLUSTER:
+		return "sfs_cluster";
 	}
 
 	return "Unknown recovery backend";
@@ -816,6 +822,9 @@ int nfs4_recovery_init(void)
 	case RECOVERY_BACKEND_RADOS_NG:
 	case RECOVERY_BACKEND_RADOS_CLUSTER:
 #endif
+	case RECOVERY_BACKEND_SFS_CLUSTER:
+		sfs_cluster_backend_init(&recovery_backend);
+		break;
 	default:
 		LogCrit(COMPONENT_CLIENTID, "Unsupported Backend %s",
 			recovery_backend_str(
@@ -1163,6 +1172,10 @@ int load_recovery_param_from_conf(config_file_t parse_tree,
 
 		return rados.load_config_from_parse(parse_tree, err_type);
 #endif
+
+	case RECOVERY_BACKEND_SFS_CLUSTER:
+		// load sfs cluster specific parameters.
+		return sfs_load_config_from_parse(parse_tree, err_type);
 	default:
 		LogCrit(COMPONENT_CLIENTID, "Unsupported Backend %s",
 			recovery_backend_str(
