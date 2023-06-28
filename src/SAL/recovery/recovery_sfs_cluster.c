@@ -164,7 +164,6 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 static int sfs_cluster_recovery_init(void)
 {
 	int ret;
-	uint64_t version = 0;
 
 	if (sfs_cluster_param.sessionid == 0) {
 		LogCrit(COMPONENT_INIT, "sessionid must be a non-zero value");
@@ -173,11 +172,11 @@ static int sfs_cluster_recovery_init(void)
 
 	sessionid = sfs_cluster_param.sessionid;
 
-	ret = sfs_recovery_backend_init(sessionid, &version);
+	ret = sfs_recovery_backend_init(sessionid);
 
 	LogEvent(COMPONENT_INIT,
-		 "creating sfs_cluster recovery database, sessionid: %d, version: %ld, ret: %d",
-		 sessionid, version, ret);
+		 "creating sfs_cluster recovery database, sessionid: %d, ret: %d",
+		 sessionid, ret);
 
 	return ret;
 }
@@ -197,6 +196,15 @@ static void sfs_cluster_read_clids(nfs_grace_start_t *gsp,
 				add_clid_entry_hook add_clid_entry,
 				add_rfh_entry_hook add_rfh_entry)
 {
+	// gsp != NULL means grace is triggered manually
+	if (gsp != NULL) {
+		int ret = sfs_load_recovery_info();
+		if (ret < 0) {
+			LogFatal(COMPONENT_CLIENTID,
+				 "Failed to update recovery info, ret: %d", ret);
+		}
+	}
+
 	const char* recov_tag = NULL;
 
 	while ((recov_tag = sfs_recovery_pop_clid_entry()) != NULL) {
@@ -219,13 +227,14 @@ static void sfs_cluster_read_clids(nfs_grace_start_t *gsp,
 
 static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 {
+	LogCrit(COMPONENT_CLIENTID, "new clid: %s\n", clientid->gsh_client->hostaddr_str);
 	char *recov_tag;
 	int ret;
 
 	// Serialized client identification.
 	recov_tag = sfs_cluster_create_val(clientid, NULL);
 
-	ret = sfs_recovery_add_clid(clientid->cid_clientid, (const char*)recov_tag);
+	ret = sfs_recovery_add_clid(clientid->cid_clientid, clientid->server_addr, (const char*)recov_tag);
 
 	if (ret < 0) {
 		LogEvent(COMPONENT_CLIENTID, "Failed to add clid %lu",
@@ -242,7 +251,7 @@ static void sfs_cluster_rm_clid(nfs_client_id_t *clientid)
 	char *recov_tag;
 	int ret;
 
-	ret = sfs_recovery_rm_clid(clientid->cid_clientid);
+	ret = sfs_recovery_rm_clid(clientid->cid_clientid, clientid->server_addr);
 	if (ret < 0) {
 		LogFatal(COMPONENT_CLIENTID, "Failed to remove clid %lu",
 			 clientid->cid_clientid);
@@ -264,7 +273,7 @@ static void sfs_cluster_add_revoke_fh(nfs_client_id_t *delr_clid, nfs_fh4 *delr_
 							rfhstr, sizeof(rfhstr));
 	assert(ret != -1);
 
-	ret = sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, (const char*)rfhstr);
+	ret = sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, delr_clid->server_addr, (const char*)rfhstr);
 	if (ret < 0) {
 		LogFatal(COMPONENT_CLIENTID, "Failed to add rfh for clid %lu",
 			 delr_clid->cid_clientid);

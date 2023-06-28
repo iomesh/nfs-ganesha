@@ -407,6 +407,7 @@ int main(int argc, char *argv[])
 	sigaddset(&signals_to_block, SIGTERM);
 	sigaddset(&signals_to_block, SIGHUP);
 	sigaddset(&signals_to_block, SIGPIPE);
+	sigaddset(&signals_to_block, SIGUSR1);
 	if (pthread_sigmask(SIG_BLOCK, &signals_to_block, NULL) != 0)
 		LogFatal(COMPONENT_MAIN,
 			 "Could not start nfs daemon, pthread_sigmask failed");

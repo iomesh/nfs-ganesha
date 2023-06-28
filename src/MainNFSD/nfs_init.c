@@ -213,6 +213,7 @@ static void *sigmgr_thread(void *UnusedArg)
 		sigemptyset(&signals_to_catch);
 		sigaddset(&signals_to_catch, SIGTERM);
 		sigaddset(&signals_to_catch, SIGHUP);
+		sigaddset(&signals_to_catch, SIGUSR1);
 		if (sigwait(&signals_to_catch, &signal_caught) != 0) {
 			LogFullDebug(COMPONENT_THREAD,
 				     "sigwait exited with error");
@@ -225,6 +226,25 @@ static void *sigmgr_thread(void *UnusedArg)
 #ifdef _HAVE_GSSAPI
 			svcauth_gss_release_cred();
 #endif /* _HAVE_GSSAPI */
+		}
+		if (signal_caught == SIGUSR1) {
+			nfs_grace_start_t gsp;
+			gsp.nodeid = -1;
+			gsp.event = EVENT_TAKE_IP;
+			while (true) {
+				int ret = nfs_start_grace(&gsp);
+				if (ret == -EAGAIN) {
+					LogEvent(COMPONENT_MAIN, "Retry grace");
+					nfs_wait_for_grace_norefs();
+				} else if (ret != 0) {
+					LogCrit(COMPONENT_MAIN, "Start grace failed %d", ret);
+					break;
+				} else {
+					break;
+				}
+			}
+			LogEvent(COMPONENT_MAIN,
+				 "SIGHUP_HANDLER: Received SIGUSR1.... entering grace period");
 		}
 	}
 	LogDebug(COMPONENT_THREAD, "sigmgr thread exiting");
