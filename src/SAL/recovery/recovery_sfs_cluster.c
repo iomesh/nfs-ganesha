@@ -8,6 +8,7 @@
 #include <ctype.h>
 
 #include "sfs_recovery_backend.h"
+#include "sfs_client.h"
 
 /* Use session_id in the SFS cluster */
 uint32_t sessionid;
@@ -161,11 +162,34 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 	return val;
 }
 
+static int sfs_start_grace(const char *vip, int event) {
+	assert(event == EVENT_RELEASE_IP || event == EVENT_TAKE_IP);
+
+	nfs_grace_start_t gsp;
+	gsp.event = event;
+	gsp.ipaddr = (char *)vip;
+
+	int ret;
+	do {
+		ret = nfs_start_grace(&gsp);
+		if (ret == -EAGAIN) {
+			nfs_wait_for_grace_norefs();
+		} else if (ret) {
+			break;
+		}
+	} while (ret);
+
+	return -ret;
+}
+
+static void write_log(const char *file, int level, uint32_t line, const char *target, const char *message)
+{
+	//TODO dynamic loglevel
+	DisplayLogComponentLevel(COMPONENT_RECOVERY_BACKEND, file, line, target, level, "%s", message);
+}
+
 static int sfs_cluster_recovery_init(void)
 {
-	int ret;
-	uint64_t version = 0;
-
 	if (sfs_cluster_param.sessionid == 0) {
 		LogCrit(COMPONENT_INIT, "sessionid must be a non-zero value");
 		return -1;
@@ -173,32 +197,31 @@ static int sfs_cluster_recovery_init(void)
 
 	sessionid = sfs_cluster_param.sessionid;
 
-	ret = sfs_recovery_backend_init(sessionid, &version);
+	sfs_recovery_log_init(write_log);
+	sfs_recovery_backend_init(sessionid, sfs_start_grace);
 
 	LogEvent(COMPONENT_INIT,
-		 "creating sfs_cluster recovery database, sessionid: %d, version: %ld, ret: %d",
-		 sessionid, version, ret);
+		 "creating sfs_cluster recovery database, sessionid: %d", sessionid);
 
-	return ret;
+	return 0;
 }
 
 /* Try to delete old recovery db */
 static void sfs_cluster_end_grace(void)
 {
-	int ret;
-
-	ret = sfs_recovery_end_grace();
-	if (ret < 0) {
-		LogFatal(COMPONENT_INIT, "Failed to end grace, ret: %d", ret);
-	}
+	sfs_recovery_end_grace();
 }
 
 static void sfs_cluster_read_clids(nfs_grace_start_t *gsp,
 				add_clid_entry_hook add_clid_entry,
 				add_rfh_entry_hook add_rfh_entry)
 {
-	const char* recov_tag = NULL;
+	if (gsp != NULL) {
+		assert(gsp->event == EVENT_TAKE_IP);
+		sfs_take_ip(gsp->ipaddr);
+	}
 
+	const char* recov_tag = NULL;
 	while ((recov_tag = sfs_recovery_pop_clid_entry()) != NULL) {
 		clid_entry_t* clid_entry;
 
@@ -225,7 +248,8 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 	// Serialized client identification.
 	recov_tag = sfs_cluster_create_val(clientid, NULL);
 
-	ret = sfs_recovery_add_clid(clientid->cid_clientid, (const char*)recov_tag);
+	ret = sfs_recovery_add_clid(clientid->cid_clientid,
+		clientid->cid_client_record->cr_server_addr, (const char*)recov_tag);
 
 	if (ret < 0) {
 		LogEvent(COMPONENT_CLIENTID, "Failed to add clid %lu",
@@ -239,17 +263,9 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 
 static void sfs_cluster_rm_clid(nfs_client_id_t *clientid)
 {
-	char *recov_tag;
-	int ret;
+	sfs_recovery_rm_clid(clientid->cid_clientid, clientid->cid_client_record->cr_server_addr);
 
-	ret = sfs_recovery_rm_clid(clientid->cid_clientid);
-	if (ret < 0) {
-		LogFatal(COMPONENT_CLIENTID, "Failed to remove clid %lu",
-			 clientid->cid_clientid);
-		return;
-	}
-
-	recov_tag = clientid->cid_recov_tag;
+	char *recov_tag = clientid->cid_recov_tag;
 	clientid->cid_recov_tag = NULL;
 	if (recov_tag != NULL)
 		gsh_free((void *)recov_tag);
@@ -264,11 +280,8 @@ static void sfs_cluster_add_revoke_fh(nfs_client_id_t *delr_clid, nfs_fh4 *delr_
 							rfhstr, sizeof(rfhstr));
 	assert(ret != -1);
 
-	ret = sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, (const char*)rfhstr);
-	if (ret < 0) {
-		LogFatal(COMPONENT_CLIENTID, "Failed to add rfh for clid %lu",
-			 delr_clid->cid_clientid);
-	}
+	sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, delr_clid->cid_client_record->cr_server_addr,
+					(const char*)rfhstr);
 }
 
 struct nfs4_recovery_backend sfs_cluster_backend = {
