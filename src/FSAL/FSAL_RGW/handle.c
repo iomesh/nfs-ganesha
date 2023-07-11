@@ -1465,7 +1465,7 @@ void rgw_fsal_write2(struct fsal_obj_handle *obj_hdl,
  */
 
 fsal_status_t rgw_fsal_commit2(struct fsal_obj_handle *obj_hdl,
-			off_t offset, size_t length)
+			off_t offset, size_t length, uint64_t *cookie)
 {
 	int rc;
 

@@ -166,7 +166,7 @@ fsal_status_t nullfs_io_advise2(struct fsal_obj_handle *obj_hdl,
 				struct state_t *state,
 				struct io_hints *hints);
 fsal_status_t nullfs_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
-			     size_t len);
+			     size_t len, uint64_t *cookie);
 fsal_status_t nullfs_lock_op2(struct fsal_obj_handle *obj_hdl,
 			      struct state_t *state,
 			      void *p_owner,

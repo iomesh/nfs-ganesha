@@ -1438,7 +1438,8 @@ static fsal_status_t io_advise2(struct fsal_obj_handle *obj_hdl,
 
 static fsal_status_t commit2(struct fsal_obj_handle *obj_hdl,
 			     off_t offset,
-			     size_t len)
+			     size_t len,
+			     uint64_t *cookie)
 {
 	LogCrit(COMPONENT_FSAL,
 		"Invoking unsupported FSAL operation");

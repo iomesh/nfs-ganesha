@@ -1477,6 +1477,7 @@ typedef enum fsal_dir_result (*fsal_readdir_cb)(
  */
 struct fsal_io_arg {
 	size_t io_amount;	/**< Total amount of I/O actually done */
+	uint64_t write_cookie;
 	struct io_info *info;	/**< More info about data for read_plus */
 	union {
 		bool end_of_file;	/**< True if end-of-file reached */
@@ -2580,8 +2581,8 @@ struct fsal_obj_ops {
  */
 	 fsal_status_t (*commit2)(struct fsal_obj_handle *obj_hdl,
 				  off_t offset,
-				  size_t len);
-
+				  size_t len,
+				  uint64_t *cookie);
 /**
  * @brief Perform a lock operation
  *

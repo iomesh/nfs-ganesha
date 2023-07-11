@@ -2051,7 +2051,8 @@ proxyv3_write2(struct fsal_obj_handle *obj_hdl,
 static fsal_status_t
 proxyv3_commit2(struct fsal_obj_handle *obj_hdl,
 		off_t offset,
-		size_t len)
+		size_t len,
+		uint64_t *cookie)
 {
 	struct proxyv3_obj_handle *obj =
 		container_of(obj_hdl, struct proxyv3_obj_handle, obj);
