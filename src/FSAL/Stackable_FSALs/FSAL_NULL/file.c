@@ -301,7 +301,7 @@ fsal_status_t nullfs_io_advise2(struct fsal_obj_handle *obj_hdl,
 }
 
 fsal_status_t nullfs_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
-			     size_t len)
+			     size_t len, uint64_t *cookie)
 {
 	struct nullfs_fsal_obj_handle *handle =
 		container_of(obj_hdl, struct nullfs_fsal_obj_handle,
@@ -315,7 +315,7 @@ fsal_status_t nullfs_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
 	op_ctx->fsal_export = export->export.sub_export;
 	fsal_status_t status =
 		handle->sub_handle->obj_ops->commit2(handle->sub_handle, offset,
-						    len);
+						    len, cookie);
 	op_ctx->fsal_export = &export->export;
 
 	return status;
