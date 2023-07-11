@@ -78,8 +78,13 @@ static enum nfs_req_result nfs4_complete_write(struct nfs4_write_data *data)
 
 	verf_desc.addr = data->res_WRITE4->WRITE4res_u.resok4.writeverf;
 	verf_desc.len = sizeof(verifier4);
-	op_ctx->fsal_export->exp_ops.get_write_verifier(op_ctx->fsal_export,
-							&verf_desc);
+	if (write_arg->write_cookie){
+		memset(verf_desc.addr, 0, sizeof(verifier4));
+		*(uint64_t*)verf_desc.addr= write_arg->write_cookie;
+	} else{
+		op_ctx->fsal_export->exp_ops.get_write_verifier(op_ctx->fsal_export,
+								&verf_desc);
+	}
 
 done:
 
@@ -484,6 +489,7 @@ enum nfs_req_result nfs4_op_write(struct nfs_argop4 *op, compound_data_t *data,
 	write_arg->iov[0].iov_len = size;
 	write_arg->iov[0].iov_base = arg_WRITE4->data.data_val;
 	write_arg->io_amount = 0;
+	write_arg->write_cookie = 0;
 	write_arg->fsal_stable = arg_WRITE4->stable != UNSTABLE4 || force_sync;
 
 

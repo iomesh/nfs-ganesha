@@ -2218,7 +2218,8 @@ bye:
 
 fsal_status_t mem_commit2(struct fsal_obj_handle *obj_hdl,
 			  off_t offset,
-			  size_t len)
+			  size_t len,
+			  uint64_t *cookie)
 {
 	return fsalstat(ERR_FSAL_NO_ERROR, 0);
 }

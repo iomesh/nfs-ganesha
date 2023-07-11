@@ -75,6 +75,8 @@ enum nfs_req_result nfs4_op_commit(struct nfs_argop4 *op, compound_data_t *data,
 	fsal_status_t fsal_status = { 0, 0 };
 	struct gsh_buffdesc verf_desc;
 
+	uint64_t cookie = 0;
+
 	resp->resop = NFS4_OP_COMMIT;
 	res_COMMIT4->status = NFS4_OK;
 
@@ -95,7 +97,7 @@ enum nfs_req_result nfs4_op_commit(struct nfs_argop4 *op, compound_data_t *data,
 		return NFS_REQ_ERROR;
 
 	fsal_status = fsal_commit(data->current_obj, arg_COMMIT4->offset,
-				  arg_COMMIT4->count);
+				  arg_COMMIT4->count, &cookie);
 	if (FSAL_IS_ERROR(fsal_status)) {
 		res_COMMIT4->status = nfs4_Errno_status(fsal_status);
 		return NFS_REQ_ERROR;
@@ -104,8 +106,13 @@ enum nfs_req_result nfs4_op_commit(struct nfs_argop4 *op, compound_data_t *data,
 	verf_desc.addr = &res_COMMIT4->COMMIT4res_u.resok4.writeverf;
 	verf_desc.len = sizeof(verifier4);
 
-	op_ctx->fsal_export->exp_ops.get_write_verifier(op_ctx->fsal_export,
-							&verf_desc);
+	if (cookie){
+		memset(verf_desc.addr, 0, sizeof(verifier4));
+		*(uint64_t*)verf_desc.addr= cookie;
+	}else{
+		op_ctx->fsal_export->exp_ops.get_write_verifier(op_ctx->fsal_export,
+								&verf_desc);
+	}
 
 	LogFullDebug(COMPONENT_NFS_V4,
 		     "Commit verifier %d-%d",

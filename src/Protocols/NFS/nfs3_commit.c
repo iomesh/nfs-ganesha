@@ -68,6 +68,7 @@ int nfs3_commit(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	fsal_status_t fsal_status;
 	struct fsal_obj_handle *obj = NULL;
 	int rc = NFS_REQ_OK;
+	uint64_t cookie = 0;
 
 	LogNFS3_Operation(COMPONENT_NFSPROTO, req, &arg->arg_commit3.file,
 			  "");
@@ -88,7 +89,7 @@ int nfs3_commit(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	}
 
 	fsal_status = fsal_commit(obj, arg->arg_commit3.offset,
-				  arg->arg_commit3.count);
+				  arg->arg_commit3.count, &cookie);
 
 	if (FSAL_IS_ERROR(fsal_status)) {
 		res->res_commit3.status = nfs3_Errno_status(fsal_status);
@@ -104,8 +105,13 @@ int nfs3_commit(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		       &(res->res_commit3.COMMIT3res_u.resok.file_wcc));
 
 	/* Set the write verifier */
-	memcpy(res->res_commit3.COMMIT3res_u.resok.verf, NFS3_write_verifier,
-	       sizeof(writeverf3));
+	if (cookie){
+		memset(res->res_commit3.COMMIT3res_u.resok.verf, 0, sizeof(writeverf3));
+		*(uint64_t*)res->res_commit3.COMMIT3res_u.resok.verf = cookie;
+	}else{
+		memcpy(res->res_commit3.COMMIT3res_u.resok.verf, NFS3_write_verifier,
+		       sizeof(writeverf3));
+	}
 	res->res_commit3.status = NFS3_OK;
 
  out:

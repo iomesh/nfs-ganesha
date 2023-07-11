@@ -394,13 +394,11 @@ fsal_status_t fsal_statfs(struct fsal_obj_handle *obj,
  */
 static inline
 fsal_status_t fsal_commit(struct fsal_obj_handle *obj, off_t offset,
-			 size_t len)
+			 size_t len, uint64_t *cookie)
 {
-	if ((uint64_t) len > ~(uint64_t) offset)
-		return fsalstat(ERR_FSAL_INVAL, 0);
-
-	return obj->obj_ops->commit2(obj, offset, len);
+	return obj->obj_ops->commit2(obj, offset, len, cookie);
 }
+
 fsal_status_t fsal_verify2(struct fsal_obj_handle *obj,
 			   fsal_verifier_t verifier);
 

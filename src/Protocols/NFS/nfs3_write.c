@@ -83,7 +83,12 @@ static int nfs3_complete_write(struct nfs3_write_data *data)
 			resok->committed = UNSTABLE;
 
 		/* Set the write verifier */
-		memcpy(resok->verf, NFS3_write_verifier, sizeof(writeverf3));
+		if (write_arg->write_cookie){
+			memset(resok->verf, 0, sizeof(writeverf3));
+			*(uint64_t*)resok->verf = write_arg->write_cookie;
+		} else{
+			memcpy(resok->verf, NFS3_write_verifier, sizeof(writeverf3));
+		}
 	} else if (data->rc == NFS_REQ_ERROR) {
 		/* If we are here, there was an error */
 		nfs_SetWccData(NULL, data->obj, &resfail->file_wcc);
@@ -367,6 +372,7 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	write_arg->iov[0].iov_len = size;
 	write_arg->iov[0].iov_base = arg->arg_write3.data.data_val;
 	write_arg->io_amount = 0;
+	write_arg->write_cookie = 0;
 
 	write_data->res = res;
 	write_data->req = req;

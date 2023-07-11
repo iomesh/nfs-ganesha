@@ -782,7 +782,7 @@ fsal_status_t mdcache_io_advise2(struct fsal_obj_handle *obj_hdl,
  * @return FSAL status
  */
 fsal_status_t mdcache_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
-			      size_t len)
+			      size_t len, uint64_t *cookie)
 {
 	mdcache_entry_t *entry =
 		container_of(obj_hdl, mdcache_entry_t, obj_handle);
@@ -790,7 +790,7 @@ fsal_status_t mdcache_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
 
 	subcall(
 		status = entry->sub_handle->obj_ops->commit2(
-			entry->sub_handle, offset, len)
+			entry->sub_handle, offset, len, cookie)
 	       );
 
 	if (status.major == ERR_FSAL_STALE)
