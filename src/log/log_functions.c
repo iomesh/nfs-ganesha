@@ -1511,6 +1511,7 @@ static log_levels_t default_log_levels[] = {
 	[COMPONENT_FSAL_UP] = NIV_EVENT,
 	[COMPONENT_DBUS] = NIV_EVENT,
 	[COMPONENT_NFS_MSK] = NIV_EVENT,
+	[COMPONENT_RECOVERY_BACKEND] = NIV_EVENT,
 };
 
 /* Active set of log levels */
@@ -1637,6 +1638,9 @@ struct log_component_info LogComponents[COMPONENT_COUNT] = {
 	[COMPONENT_NFS_MSK] = {
 		.comp_name = "COMPONENT_NFS_MSK",
 		.comp_str = "NFS_MSK",},
+	[COMPONENT_RECOVERY_BACKEND] = {
+		.comp_name = "COMPONENT_RECOVERY_BACKEND",
+		.comp_str = "RECOVERY_BACKEND",}
 };
 
 void DisplayLogComponentLevel(log_components_t component, const char *file,
@@ -2141,6 +2145,8 @@ static struct config_item component_levels[] = {
 			 COMPONENT_DBUS, int),
 	CONF_INDEX_TOKEN("NFS_MSK", NB_LOG_LEVEL, log_levels,
 			 COMPONENT_NFS_MSK, int),
+	CONF_INDEX_TOKEN("RECOVERY_BACKEND", NB_LOG_LEVEL, log_levels,
+			 COMPONENT_RECOVERY_BACKEND, int),
 	CONFIG_EOL
 };
 

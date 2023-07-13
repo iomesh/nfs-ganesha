@@ -44,6 +44,7 @@
 #include "bsd-base64.h"
 #include "client_mgr.h"
 #include "fsal.h"
+#include <arpa/inet.h>
 
 /* The grace_mutex protects current_grace, clid_list, and clid_count */
 static pthread_mutex_t grace_mutex;
@@ -1050,23 +1051,10 @@ static void nfs_release_nlm_state(char *release_ip)
 
 static int ip_match(char *ip, nfs_client_id_t *cid)
 {
-	char *haystack;
-	char *value = cid->cid_client_record->cr_client_val;
-	int len = cid->cid_client_record->cr_client_val_len;
+	in_addr_t saddr = inet_addr(ip);
+	saddr = ntohl(saddr);
 
-	LogDebug(COMPONENT_STATE, "NFS Server V4 match ip %s with (%.*s)",
-		 ip, len, value);
-
-	if (strlen(ip) == 0)	/* No IP all are matching */
-		return 1;
-
-	haystack = alloca(len + 1);
-	memcpy(haystack, value, len);
-	haystack[len] = '\0';
-	if (strstr(haystack, ip) != NULL)
-		return 1;
-
-	return 0;		/* no match */
+	return (uint32_t)saddr == cid->cid_client_record->cr_server_addr;
 }
 
 /*
@@ -1118,6 +1106,7 @@ restart:
 
 				PTHREAD_MUTEX_unlock(&recp->cr_mutex);
 
+				remove_confirmed_client_id(cp);
 				dec_client_id_ref(cp);
 				goto restart;
 
