@@ -737,7 +737,7 @@ exit:
 /**
  * @brief Bind the udp and tcp sockets for V4 Interfaces
  */
-static int Bind_sockets_V4(void)
+int Bind_sockets_V4(void)
 {
 	protos p;
 	int    rc = 0;
@@ -902,8 +902,8 @@ void Bind_sockets(void)
 	 * have set the global v6disabled accordingly
 	 */
 	if (v6disabled) {
-		rc = Bind_sockets_V4();
-		if (rc)
+		// rc = Bind_sockets_V4();
+		// if (rc)
 			LogFatal(COMPONENT_DISPATCH,
 				 "Error binding to V4 interface. Cannot continue.");
 	} else {
