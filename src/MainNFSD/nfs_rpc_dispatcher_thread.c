@@ -1408,15 +1408,15 @@ void nfs_Init_svc(void)
 		LogFullDebug(COMPONENT_DISPATCH,
 			     "netconfig found for UDPv6 and TCPv6");
 
-	/* Allocate the UDP and TCP sockets for the RPC */
-	Allocate_sockets();
-
 	if ((NFS_options & CORE_OPTION_ALL_NFS_VERS) != 0) {
-		/* Bind the tcp and udp sockets */
-		Bind_sockets();
-
 		/* Unregister from portmapper/rpcbind */
 		unregister_rpc();
+
+		/* Allocate the UDP and TCP sockets for the RPC */
+		Allocate_sockets();
+
+		/* Bind the tcp and udp sockets */
+		Bind_sockets();
 
 		/* Set up well-known xprt handles */
 		Create_SVCXPRTs();
@@ -1457,6 +1457,7 @@ void nfs_Init_svc(void)
 	 */
 #ifdef _USE_NFS3
 	if (NFS_options & CORE_OPTION_NFSV3) {
+		LogFatal(COMPONENT_DISPATCH, "teststet");
 		Register_program(P_NFS, NFS_V3);
 		Register_program(P_MNT, MOUNT_V1);
 		Register_program(P_MNT, MOUNT_V3);
