@@ -140,7 +140,13 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 
 	struct in_addr s_addr;
 	s_addr.s_addr = htonl(clientid->cid_client_record->cr_server_addr);
-	char *str_server_addr = inet_ntoa(s_addr);
+	char str_server_addr[INET_ADDRSTRLEN];
+	const char *addr = inet_ntop(AF_INET, &s_addr, str_server_addr, INET_ADDRSTRLEN);
+	if (unlikely(addr == NULL)) {
+		LogFatal(COMPONENT_CLIENTID, "invalid server address: %u",
+			 clientid->cid_client_record->cr_server_addr);
+	}
+
 	int str_server_addr_len = strlen(str_server_addr);
 
 	lsize = str_client_addr_len + 2 + cidstr_lenx_len + 1 + cidstr_len + 3 + str_server_addr_len + 1;
