@@ -40,7 +40,7 @@
 #include "sal_functions.h"
 #include "nfs_creds.h"
 
-int get_raddr(SVCXPRT *xprt)
+uint32_t get_raddr(SVCXPRT *xprt)
 {
 	sockaddr_t *ss = svc_getrpclocal(xprt);
 	int addr = 0;
