@@ -1275,6 +1275,8 @@ static bool __Register_program(protos prot, int vers)
 	LogInfo(COMPONENT_DISPATCH, "Registering %s V%d/TCP",
 		tags[prot], (int)vers);
 
+	LogInfo(COMPONENT_DISPATCH, "svcxprt nb, maxlen: %u, len: %u, socklen: %lu",
+		tcp_xprt[prot]->xp_local.nb.maxlen, tcp_xprt[prot]->xp_local.nb.len, sizeof(struct sockaddr_in));
 	if (!TCP_REGISTER(prot, vers, netconfig_tcpv4)) {
 		LogMajor(COMPONENT_DISPATCH,
 			 "Cannot register %s V%d on TCP", tags[prot],
@@ -1420,6 +1422,8 @@ void nfs_Init_svc(void)
 
 		/* Set up well-known xprt handles */
 		Create_SVCXPRTs();
+		LogCrit(COMPONENT_DISPATCH, "svcxprt nb, maxlen: %u, len: %u, socklen: %lu",
+			tcp_xprt[0]->xp_local.nb.maxlen, tcp_xprt[0]->xp_local.nb.len, sizeof(struct sockaddr_in));
 	}
 
 #ifdef _HAVE_GSSAPI
