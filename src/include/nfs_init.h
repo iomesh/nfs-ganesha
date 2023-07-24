@@ -126,4 +126,16 @@ enum xprt_stat nfs_rpc_valid_RQUOTA(struct svc_req *);
 enum xprt_stat nfs_rpc_valid_NFSACL(struct svc_req *);
 #endif
 
+/**
+ * create sockets, bind them to the new ip_addr,
+ * and register them to the event channel
+*/
+void bind_ipv4_address(uint32_t ip_addr);
+
+/**
+ * unbind given ip address, close related fds,
+ * and unregister them from event channel
+*/
+void unbind_ipv4_address(uint32_t ip_addr);
+
 #endif				/* !NFS_INIT_H */

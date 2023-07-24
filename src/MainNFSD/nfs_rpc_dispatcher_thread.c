@@ -159,18 +159,127 @@ typedef struct proto_data {
 	struct __rpc_sockinfo si_tcp6;
 } proto_data;
 
-proto_data pdata[P_COUNT];
-
 struct netconfig *netconfig_udpv4;
 struct netconfig *netconfig_tcpv4;
 struct netconfig *netconfig_udpv6;
 struct netconfig *netconfig_tcpv6;
 
-/* RPC Service Sockets and Transports */
-int udp_socket[P_COUNT];
-int tcp_socket[P_COUNT];
-SVCXPRT *udp_xprt[P_COUNT];
-SVCXPRT *tcp_xprt[P_COUNT];
+/**
+ * @brief Computes the hash value for the entry in Binded IP Addresses
+ *
+ * @param[in] hparam Hash table parameter
+ * @param[in] key    Pointer to the hash key buffer
+ *
+ * @return The computed hash value.
+ *
+ * @see hashtable_init
+ *
+ */
+uint32_t ip_addr_hash_func(hash_parameter_t *hparam,
+				   struct gsh_buffdesc *key)
+{
+	uint32_t ip_addr;
+
+	memcpy(&ip_addr, key->addr, sizeof(ip_addr));
+
+	return ip_addr % hparam->index_size;
+}
+
+/**
+ * @brief Computes the RBT hash for the entry in Binded IP Addresses
+ *
+ * @param[in] hparam Hash table parameter.
+ * @param[in] key    Hash key buffer
+ *
+ * @return The computed RBT value.
+ *
+ * @see hashtable_init
+ *
+ */
+uint64_t ip_addr_rbt_hash_func(hash_parameter_t *hparam,
+				 struct gsh_buffdesc *key)
+{
+	uint32_t ip_addr;
+
+	memcpy(&ip_addr, key->addr, sizeof(ip_addr));
+
+	return (uint64_t) ip_addr;
+}
+
+/**
+ * @brief Compares ip addr stored in the key buffers.
+ *
+ * @param[in] buff1 first key
+ * @param[in] buff2 second key
+ *
+ * @retval 0 if keys are identifical.
+ * @retval 1 if the keys are different.
+ *
+ */
+int compare_ip_addr(struct gsh_buffdesc *buff1, struct gsh_buffdesc *buff2)
+{
+	uint32_t ip_addr1 = *((uint32_t *) (buff1->addr));
+	uint32_t ip_addr2 = *((uint32_t *) (buff2->addr));
+
+	return (ip_addr1 == ip_addr2) ? 0 : 1;
+}
+
+/**
+ * @brief Displays the ip addr stored from the hash table
+ *
+ * @param[in]  dspbuf display buffer to display into
+ * @param[in]  buff   Buffer to display
+  */
+int display_ip_addr_key(struct display_buffer *dspbuf,
+			  struct gsh_buffdesc *buff)
+{
+	struct in_addr s_addr;
+	s_addr.s_addr = htonl(*(uint32_t*)(buff->addr));
+
+	return display_printf(dspbuf, "%s", inet_ntoa(s_addr));
+}
+
+/**
+ * @brief Displays the client record from a hash table
+ * 
+ * for now, val has nothing to display, just return 0
+ *
+ * @param[in]  dspbuf display buffer to display into
+ * @param[in]  buff   Buffer to display
+ * 
+ *  @return Length of display string.
+ */
+int display_network_data_val(struct display_buffer *dspbuf,
+			  struct gsh_buffdesc *buff)
+{
+	return 0;
+}
+
+typedef struct network_data {
+	uint32_t ip_addr;
+	proto_data pdata[P_COUNT];
+
+	/* RPC Service Sockets and Transports */
+	int udp_socket[P_COUNT];
+	int tcp_socket[P_COUNT];
+	SVCXPRT *udp_xprt[P_COUNT];
+	SVCXPRT *tcp_xprt[P_COUNT];
+} network_data;
+
+static hash_parameter_t ip_address_hash_param = {
+	.index_size = 11,
+	.hash_func_key = ip_addr_hash_func,
+	.hash_func_rbt = ip_addr_rbt_hash_func,
+	.hash_func_both = NULL,
+	.compare_key = compare_ip_addr,
+	.display_key = display_ip_addr_key,
+	.display_val = display_network_data_val,
+	.ht_name = "Binded IP Addresses",
+	.flags = HT_FLAG_CACHE,
+	.ht_log_component = COMPONENT_DISPATCH,
+};
+
+static hash_table_t *ip_address_hashtable;
 
 /* Flag to indicate if V6 interfaces on the host are enabled */
 bool v6disabled;
@@ -283,19 +392,19 @@ static inline bool nfs_protocol_enabled(protos p)
  * immediately if no connection is pending on it, hence drastically
  * reducing the probability for trouble.
  */
-static void close_rpc_fd(void)
+static void close_rpc_fd(network_data *ndata)
 {
 	protos p;
 
 	for (p = P_NFS; p < P_COUNT; p++) {
-		if (udp_socket[p] != -1)
-			close(udp_socket[p]);
-		if (udp_xprt[p])
-			SVC_DESTROY(udp_xprt[p]);
-		if (tcp_socket[p] != -1)
-			close(tcp_socket[p]);
-		if (tcp_xprt[p])
-			SVC_DESTROY(tcp_xprt[p]);
+		if (ndata->udp_xprt[p])
+			SVC_DESTROY(ndata->udp_xprt[p]);
+		if (ndata->udp_socket[p] != -1)
+			close(ndata->udp_socket[p]);
+		if (ndata->tcp_xprt[p])
+			SVC_DESTROY(ndata->tcp_xprt[p]);
+		if (ndata->tcp_socket[p] != -1)
+			close(ndata->tcp_socket[p]);
 	}
 	/* no need for special tcp_xprt[P_NFS_VSOCK] treatment */
 }
@@ -484,48 +593,48 @@ const svc_xprt_fun_t tcp_dispatch[P_COUNT] = {
 #endif
 };
 
-void Create_udp(protos prot)
+void Create_udp(protos prot, network_data *ndata)
 {
-	if (udp_socket[prot] != -1) {
-		udp_xprt[prot] =
-		    svc_dg_create(udp_socket[prot],
+	if (ndata->udp_socket[prot] != -1) {
+		ndata->udp_xprt[prot] =
+		    svc_dg_create(ndata->udp_socket[prot],
 			nfs_param.core_param.rpc.max_send_buffer_size,
 			nfs_param.core_param.rpc.max_recv_buffer_size);
-		if (udp_xprt[prot] == NULL)
+		if (ndata->udp_xprt[prot] == NULL)
 			LogFatal(COMPONENT_DISPATCH,
 				 "Cannot allocate %s/UDP SVCXPRT", tags[prot]);
 
-		udp_xprt[prot]->xp_dispatch.rendezvous_cb = udp_dispatch[prot];
+		ndata->udp_xprt[prot]->xp_dispatch.rendezvous_cb = udp_dispatch[prot];
 
 		/* Hook xp_free_user_data (finalize/free private data) */
-		(void)SVC_CONTROL(udp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
+		(void)SVC_CONTROL(ndata->udp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
 				  nfs_rpc_free_user_data);
 
 		(void)svc_rqst_evchan_reg(rpc_evchan[UDP_UREG_CHAN].chan_id,
-					  udp_xprt[prot],
+					  ndata->udp_xprt[prot],
 					  SVC_RQST_FLAG_XPRT_UREG);
 	}
 }
 
-void Create_tcp(protos prot)
+void Create_tcp(protos prot, network_data *ndata)
 {
-	tcp_xprt[prot] =
-		svc_vc_ncreatef(tcp_socket[prot],
+	ndata->tcp_xprt[prot] =
+		svc_vc_ncreatef(ndata->tcp_socket[prot],
 				nfs_param.core_param.rpc.max_send_buffer_size,
 				nfs_param.core_param.rpc.max_recv_buffer_size,
 				SVC_CREATE_FLAG_CLOSE | SVC_CREATE_FLAG_LISTEN);
-	if (tcp_xprt[prot] == NULL)
+	if (ndata->tcp_xprt[prot] == NULL)
 		LogFatal(COMPONENT_DISPATCH, "Cannot allocate %s/TCP SVCXPRT",
 			 tags[prot]);
 
-	tcp_xprt[prot]->xp_dispatch.rendezvous_cb = tcp_dispatch[prot];
+	ndata->tcp_xprt[prot]->xp_dispatch.rendezvous_cb = tcp_dispatch[prot];
 
 	/* Hook xp_free_user_data (finalize/free private data) */
-	(void)SVC_CONTROL(tcp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
+	(void)SVC_CONTROL(ndata->tcp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
 			  nfs_rpc_free_user_data);
 
 	(void)svc_rqst_evchan_reg(rpc_evchan[TCP_UREG_CHAN].chan_id,
-				  tcp_xprt[prot], SVC_RQST_FLAG_XPRT_UREG);
+				  ndata->tcp_xprt[prot], SVC_RQST_FLAG_XPRT_UREG);
 }
 
 #ifdef _USE_NFS_RDMA
@@ -552,55 +661,55 @@ static enum xprt_stat nfs_rpc_dispatch_RDMA(SVCXPRT *xprt)
 	return SVC_STAT(xprt->xp_parent);
 }
 
-void Create_RDMA(protos prot)
+void Create_RDMA(protos prot, network_data *ndata)
 {
 	/* This has elements of both UDP and TCP setup */
-	tcp_xprt[prot] =
+	ndata->tcp_xprt[prot] =
 		svc_rdma_create(&rpc_rdma_xa,
 				nfs_param.core_param.rpc.max_send_buffer_size,
 				nfs_param.core_param.rpc.max_recv_buffer_size);
-	if (tcp_xprt[prot] == NULL)
+	if (ndata->tcp_xprt[prot] == NULL)
 		LogFatal(COMPONENT_DISPATCH, "Cannot allocate RPC/%s SVCXPRT",
 			 tags[prot]);
 
-	tcp_xprt[prot]->xp_dispatch.rendezvous_cb = nfs_rpc_dispatch_RDMA;
+	ndata->tcp_xprt[prot]->xp_dispatch.rendezvous_cb = nfs_rpc_dispatch_RDMA;
 
 	/* Hook xp_free_user_data (finalize/free private data) */
-	(void)SVC_CONTROL(tcp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
+	(void)SVC_CONTROL(ndata->tcp_xprt[prot], SVCSET_XP_FREE_USER_DATA,
 			  nfs_rpc_free_user_data);
 
 	(void)svc_rqst_evchan_reg(rpc_evchan[RDMA_UREG_CHAN].chan_id,
-				  tcp_xprt[prot], SVC_RQST_FLAG_XPRT_UREG);
+				  ndata->tcp_xprt[prot], SVC_RQST_FLAG_XPRT_UREG);
 }
 #endif
 
 /**
  * @brief Create the SVCXPRT for each protocol in use
  */
-void Create_SVCXPRTs(void)
+void Create_SVCXPRTs(network_data *ndata)
 {
 	protos p;
 
 	LogFullDebug(COMPONENT_DISPATCH, "Allocation of the SVCXPRT");
 	for (p = P_NFS; p < P_COUNT; p++)
 		if (nfs_protocol_enabled(p)) {
-			Create_udp(p);
-			Create_tcp(p);
+			Create_udp(p, ndata);
+			Create_tcp(p, ndata);
 		}
 #ifdef RPC_VSOCK
 	if (vsock)
-		Create_tcp(P_NFS_VSOCK);
+		Create_tcp(P_NFS_VSOCK, ndata);
 #endif /* RPC_VSOCK */
 #ifdef _USE_NFS_RDMA
 	if (rdma)
-		Create_RDMA(P_NFS_RDMA);
+		Create_RDMA(P_NFS_RDMA, ndata);
 #endif /* _USE_NFS_RDMA */
 }
 
 /**
  * @brief Bind the udp and tcp sockets for V6 Interfaces
  */
-static int Bind_sockets_V6(void)
+static int Bind_sockets_V6(network_data *ndata)
 {
 	protos p;
 	int    rc = 0;
@@ -616,9 +725,9 @@ static int Bind_sockets_V6(void)
 	for (p = P_NFS; p < P_COUNT; p++) {
 		if (nfs_protocol_enabled(p)) {
 
-			proto_data *pdatap = &pdata[p];
+			proto_data *pdatap = &ndata->pdata[p];
 
-			if (udp_socket[p] != -1) {
+			if (ndata->udp_socket[p] != -1) {
 				memset(&pdatap->sinaddr_udp6, 0,
 				       sizeof(pdatap->sinaddr_udp6));
 				pdatap->sinaddr_udp6.sin6_family = AF_INET6;
@@ -639,7 +748,7 @@ static int Bind_sockets_V6(void)
 				pdatap->bindaddr_udp6.addr =
 				    pdatap->netbuf_udp6;
 
-				if (!__rpc_fd2sockinfo(udp_socket[p],
+				if (!__rpc_fd2sockinfo(ndata->udp_socket[p],
 				    &pdatap->si_udp6)) {
 					LogWarn(COMPONENT_DISPATCH,
 						"Cannot get %s socket info for udp6 socket errno=%d (%s)",
@@ -663,7 +772,7 @@ static int Bind_sockets_V6(void)
 						str, tags[p]);
 				}
 
-				rc = bind(udp_socket[p],
+				rc = bind(ndata->udp_socket[p],
 					  (struct sockaddr *)
 					  pdatap->bindaddr_udp6.addr.buf,
 					  (socklen_t) pdatap->si_udp6.si_alen);
@@ -694,7 +803,7 @@ static int Bind_sockets_V6(void)
 			pdatap->bindaddr_tcp6.qlen = SOMAXCONN;
 			pdatap->bindaddr_tcp6.addr = pdatap->netbuf_tcp6;
 
-			if (!__rpc_fd2sockinfo(tcp_socket[p],
+			if (!__rpc_fd2sockinfo(ndata->tcp_socket[p],
 			    &pdatap->si_tcp6)) {
 				LogWarn(COMPONENT_DISPATCH,
 					 "Cannot get %s socket info for tcp6 socket errno=%d (%s)",
@@ -717,7 +826,7 @@ static int Bind_sockets_V6(void)
 					str, tags[p]);
 			}
 
-			rc = bind(tcp_socket[p],
+			rc = bind(ndata->tcp_socket[p],
 				  (struct sockaddr *)
 				   pdatap->bindaddr_tcp6.addr.buf,
 				 (socklen_t) pdatap->si_tcp6.si_alen);
@@ -737,7 +846,7 @@ exit:
 /**
  * @brief Bind the udp and tcp sockets for V4 Interfaces
  */
-static int Bind_sockets_V4(void)
+static int Bind_sockets_V4(network_data *ndata, uint32_t ip_addr)
 {
 	protos p;
 	int    rc = 0;
@@ -753,17 +862,15 @@ static int Bind_sockets_V4(void)
 	for (p = P_NFS; p < P_COUNT; p++) {
 		if (nfs_protocol_enabled(p)) {
 
-			proto_data *pdatap = &pdata[p];
+			proto_data *pdatap = &ndata->pdata[p];
 
-			if (udp_socket[p] != -1) {
+			if (ndata->udp_socket[p] != -1) {
 				memset(&pdatap->sinaddr_udp, 0,
 				       sizeof(pdatap->sinaddr_udp));
 				pdatap->sinaddr_udp.sin_family = AF_INET;
 				/* all interfaces */
 				pdatap->sinaddr_udp.sin_addr.s_addr =
-				    ((struct sockaddr_in *)
-				    &nfs_param.core_param.bind_addr)->
-				    sin_addr.s_addr;
+				    htonl(ip_addr);
 				pdatap->sinaddr_udp.sin_port =
 				    htons(nfs_param.core_param.port[p]);
 
@@ -777,7 +884,7 @@ static int Bind_sockets_V4(void)
 				pdatap->bindaddr_udp6.addr =
 				    pdatap->netbuf_udp6;
 
-				if (!__rpc_fd2sockinfo(udp_socket[p],
+				if (!__rpc_fd2sockinfo(ndata->udp_socket[p],
 				    &pdatap->si_udp6)) {
 					LogWarn(COMPONENT_DISPATCH,
 						"Cannot get %s socket info for udp6 socket errno=%d (%s)",
@@ -801,7 +908,7 @@ static int Bind_sockets_V4(void)
 						str, tags[p]);
 				}
 
-				rc = bind(udp_socket[p],
+				rc = bind(ndata->udp_socket[p],
 					  (struct sockaddr *)
 					  pdatap->bindaddr_udp6.addr.buf,
 					  (socklen_t) pdatap->si_udp6.si_alen);
@@ -819,8 +926,7 @@ static int Bind_sockets_V4(void)
 			pdatap->sinaddr_tcp.sin_family = AF_INET;
 			/* all interfaces */
 			pdatap->sinaddr_tcp.sin_addr.s_addr =
-			    ((struct sockaddr_in *)
-			    &nfs_param.core_param.bind_addr)->sin_addr.s_addr;
+			    htonl(ip_addr);
 			pdatap->sinaddr_tcp.sin_port =
 			    htons(nfs_param.core_param.port[p]);
 
@@ -832,7 +938,7 @@ static int Bind_sockets_V4(void)
 			pdatap->bindaddr_tcp6.qlen = SOMAXCONN;
 			pdatap->bindaddr_tcp6.addr = pdatap->netbuf_tcp6;
 
-			if (!__rpc_fd2sockinfo(tcp_socket[p],
+			if (!__rpc_fd2sockinfo(ndata->tcp_socket[p],
 			    &pdatap->si_tcp6)) {
 				LogWarn(COMPONENT_DISPATCH,
 					"V4 : Cannot get %s socket info for tcp socket error %d(%s)",
@@ -855,7 +961,7 @@ static int Bind_sockets_V4(void)
 					str, tags[p]);
 			}
 
-			rc = bind(tcp_socket[p],
+			rc = bind(ndata->tcp_socket[p],
 				  (struct sockaddr *)
 				  pdatap->bindaddr_tcp6.addr.buf,
 				  (socklen_t) pdatap->si_tcp6.si_alen);
@@ -872,7 +978,7 @@ static int Bind_sockets_V4(void)
 }
 
 #ifdef RPC_VSOCK
-int bind_sockets_vsock(void)
+int bind_sockets_vsock(network_data *ndata)
 {
 	int rc = 0;
 
@@ -882,7 +988,7 @@ int bind_sockets_vsock(void)
 		.svm_port = nfs_param.core_param.port[P_NFS],
 	};
 
-	rc = bind(tcp_socket[P_NFS_VSOCK], (struct sockaddr *)
+	rc = bind(ndata->tcp_socket[P_NFS_VSOCK], (struct sockaddr *)
 		(struct sockaddr *)&sa_listen, sizeof(sa_listen));
 	if (rc == -1) {
 		LogWarn(COMPONENT_DISPATCH,
@@ -893,7 +999,7 @@ int bind_sockets_vsock(void)
 }
 #endif /* RPC_VSOCK */
 
-void Bind_sockets(void)
+void Bind_sockets(network_data *ndata)
 {
 	int rc = 0;
 
@@ -902,19 +1008,19 @@ void Bind_sockets(void)
 	 * have set the global v6disabled accordingly
 	 */
 	if (v6disabled) {
-		rc = Bind_sockets_V4();
+		rc = Bind_sockets_V4(ndata, 0);
 		if (rc)
 			LogFatal(COMPONENT_DISPATCH,
 				 "Error binding to V4 interface. Cannot continue.");
 	} else {
-		rc = Bind_sockets_V6();
+		rc = Bind_sockets_V6(ndata);
 		if (rc)
 			LogFatal(COMPONENT_DISPATCH,
 				 "Error binding to V6 interface. Cannot continue.");
 	}
 #ifdef RPC_VSOCK
 	if (vsock) {
-		rc = bind_sockets_vsock();
+		rc = bind_sockets_vsock(ndata);
 		if (rc)
 			LogMajor(COMPONENT_DISPATCH,
 				"AF_VSOCK bind failed (continuing startup)");
@@ -930,15 +1036,15 @@ void Bind_sockets(void)
  *	  udp and tcp sockets
  *
  */
-static int alloc_socket_setopts(int p)
+static int alloc_socket_setopts(int p, network_data *ndata)
 {
 	int one = 1;
 	const struct nfs_core_param *nfs_cp = &nfs_param.core_param;
 
 	/* Use SO_REUSEADDR in order to avoid wait
 	 * the 2MSL timeout */
-	if (udp_socket[p] != -1) {
-		if (setsockopt(udp_socket[p],
+	if (ndata->udp_socket[p] != -1) {
+		if (setsockopt(ndata->udp_socket[p],
 			       SOL_SOCKET, SO_REUSEADDR,
 			       &one, sizeof(one))) {
 			LogWarn(COMPONENT_DISPATCH,
@@ -949,7 +1055,7 @@ static int alloc_socket_setopts(int p)
 		}
 	}
 
-	if (setsockopt(tcp_socket[p],
+	if (setsockopt(ndata->tcp_socket[p],
 		       SOL_SOCKET, SO_REUSEADDR,
 		       &one, sizeof(one))) {
 		LogWarn(COMPONENT_DISPATCH,
@@ -960,7 +1066,7 @@ static int alloc_socket_setopts(int p)
 	}
 
 	if (nfs_cp->enable_tcp_keepalive) {
-		if (setsockopt(tcp_socket[p],
+		if (setsockopt(ndata->tcp_socket[p],
 			       SOL_SOCKET, SO_KEEPALIVE,
 			       &one, sizeof(one))) {
 			LogWarn(COMPONENT_DISPATCH,
@@ -971,7 +1077,7 @@ static int alloc_socket_setopts(int p)
 		}
 
 		if (nfs_cp->tcp_keepcnt) {
-			if (setsockopt(tcp_socket[p], IPPROTO_TCP, TCP_KEEPCNT,
+			if (setsockopt(ndata->tcp_socket[p], IPPROTO_TCP, TCP_KEEPCNT,
 				       &nfs_cp->tcp_keepcnt,
 				       sizeof(nfs_cp->tcp_keepcnt))) {
 				LogWarn(COMPONENT_DISPATCH,
@@ -983,7 +1089,7 @@ static int alloc_socket_setopts(int p)
 		}
 
 		if (nfs_cp->tcp_keepidle) {
-			if (setsockopt(tcp_socket[p], IPPROTO_TCP, TCP_KEEPIDLE,
+			if (setsockopt(ndata->tcp_socket[p], IPPROTO_TCP, TCP_KEEPIDLE,
 				       &nfs_cp->tcp_keepidle,
 				       sizeof(nfs_cp->tcp_keepidle))) {
 				LogWarn(COMPONENT_DISPATCH,
@@ -995,7 +1101,7 @@ static int alloc_socket_setopts(int p)
 		}
 
 		if (nfs_cp->tcp_keepintvl) {
-			if (setsockopt(tcp_socket[p], IPPROTO_TCP,
+			if (setsockopt(ndata->tcp_socket[p], IPPROTO_TCP,
 				       TCP_KEEPINTVL, &nfs_cp->tcp_keepintvl,
 				       sizeof(nfs_cp->tcp_keepintvl))) {
 				LogWarn(COMPONENT_DISPATCH,
@@ -1007,10 +1113,10 @@ static int alloc_socket_setopts(int p)
 		}
 	}
 
-	if (udp_socket[p] != -1) {
+	if (ndata->udp_socket[p] != -1) {
 		/* We prefer using non-blocking socket
 		 * in the specific case */
-		if (fcntl(udp_socket[p], F_SETFL, FNDELAY) == -1) {
+		if (fcntl(ndata->udp_socket[p], F_SETFL, FNDELAY) == -1) {
 			LogWarn(COMPONENT_DISPATCH,
 				"Cannot set udp socket for %s as non blocking, error %d(%s)",
 				tags[p], errno, strerror(errno));
@@ -1038,15 +1144,15 @@ static bool enable_udp_listener(protos prot)
  * @brief Allocate the tcp and udp sockets for the nfs daemon
  * using V4 interfaces
  */
-static int Allocate_sockets_V4(int p)
+static int Allocate_sockets_V4(int p, network_data *ndata)
 {
-	udp_socket[p] = tcp_socket[p] = -1;
+	ndata->udp_socket[p] = ndata->tcp_socket[p] = -1;
 	if (enable_udp_listener(p)) {
-		udp_socket[p] = socket(AF_INET,
+		ndata->udp_socket[p] = socket(AF_INET,
 				       SOCK_DGRAM,
 				       IPPROTO_UDP);
 
-		if (udp_socket[p] == -1) {
+		if (ndata->udp_socket[p] == -1) {
 			if (errno == EAFNOSUPPORT) {
 				LogInfo(COMPONENT_DISPATCH,
 					"No V6 and V4 intfs configured?!");
@@ -1060,11 +1166,11 @@ static int Allocate_sockets_V4(int p)
 		}
 	}
 
-	tcp_socket[p] = socket(AF_INET,
+	ndata->tcp_socket[p] = socket(AF_INET,
 			       SOCK_STREAM,
 			       IPPROTO_TCP);
 
-	if (tcp_socket[p] == -1) {
+	if (ndata->tcp_socket[p] == -1) {
 		LogWarn(COMPONENT_DISPATCH,
 			"Cannot allocate a tcp socket for %s, error %d(%s)",
 			tags[p], errno, strerror(errno));
@@ -1079,18 +1185,18 @@ static int Allocate_sockets_V4(int p)
 /**
  * @brief Create vmci stream socket
  */
-static int allocate_socket_vsock(void)
+static int allocate_socket_vsock(network_data *ndata)
 {
 	int one = 1;
 
-	tcp_socket[P_NFS_VSOCK] = socket(AF_VSOCK, SOCK_STREAM, 0);
-	if (tcp_socket[P_NFS_VSOCK] == -1) {
+	ndata->tcp_socket[P_NFS_VSOCK] = socket(AF_VSOCK, SOCK_STREAM, 0);
+	if (ndata->tcp_socket[P_NFS_VSOCK] == -1) {
 		LogWarn(COMPONENT_DISPATCH,
 			"socket create failed for %s, error %d(%s)",
 			tags[P_NFS_VSOCK], errno, strerror(errno));
 		return -1;
 	}
-	if (setsockopt(tcp_socket[P_NFS_VSOCK],
+	if (setsockopt(ndata->tcp_socket[P_NFS_VSOCK],
 			SOL_SOCKET, SO_REUSEADDR,
 			&one, sizeof(one))) {
 		LogWarn(COMPONENT_DISPATCH,
@@ -1103,7 +1209,7 @@ static int allocate_socket_vsock(void)
 	LogDebug(COMPONENT_DISPATCH,
 		"Socket numbers are: %s tcp=%d",
 		tags[P_NFS_VSOCK],
-		tcp_socket[P_NFS_VSOCK]);
+		ndata->tcp_socket[P_NFS_VSOCK]);
 	return 0;
 }
 #endif /* RPC_VSOCK */
@@ -1111,7 +1217,7 @@ static int allocate_socket_vsock(void)
 /**
  * @brief Allocate the tcp and udp sockets for the nfs daemon
  */
-static void Allocate_sockets(void)
+static void Allocate_sockets(network_data *ndata)
 {
 	protos	p;
 	int	rc = 0;
@@ -1121,18 +1227,18 @@ static void Allocate_sockets(void)
 	for (p = P_NFS; p < P_COUNT; p++) {
 		/* Initialize all the sockets to -1 because
 		 * it makes some code later easier */
-		udp_socket[p] = tcp_socket[p] = -1;
+		ndata->udp_socket[p] = ndata->tcp_socket[p] = -1;
 
 		if (nfs_protocol_enabled(p)) {
 			if (v6disabled)
 				goto try_V4;
 
 			if (enable_udp_listener(p)) {
-				udp_socket[p] = socket(AF_INET6,
+				ndata->udp_socket[p] = socket(AF_INET6,
 						       SOCK_DGRAM,
 						       IPPROTO_UDP);
 
-				if (udp_socket[p] == -1) {
+				if (ndata->udp_socket[p] == -1) {
 					/*
 					 * We assume that EAFNOSUPPORT points
 					 * to the likely case when the host has
@@ -1156,11 +1262,11 @@ static void Allocate_sockets(void)
 				}
 			}
 
-			tcp_socket[p] = socket(AF_INET6,
+			ndata->tcp_socket[p] = socket(AF_INET6,
 					       SOCK_STREAM,
 					       IPPROTO_TCP);
 
-			if (tcp_socket[p] == -1) {
+			if (ndata->tcp_socket[p] == -1) {
 				/* We fail with LogFatal here on error because
 				 * it shouldn't be that we have managed to
 				 * create a V6 based udp socket and have failed
@@ -1188,7 +1294,7 @@ static void Allocate_sockets(void)
 
 try_V4:
 			if (v6disabled) {
-				rc = Allocate_sockets_V4(p);
+				rc = Allocate_sockets_V4(p, ndata);
 				if (rc) {
 					LogFatal(COMPONENT_DISPATCH,
 						 "Error allocating V4 socket for proto %d, %s",
@@ -1196,7 +1302,7 @@ try_V4:
 				}
 			}
 
-			rc = alloc_socket_setopts(p);
+			rc = alloc_socket_setopts(p, ndata);
 			if (rc) {
 				LogFatal(COMPONENT_DISPATCH,
 					 "Error setting socket option for proto %d, %s",
@@ -1205,13 +1311,15 @@ try_V4:
 			LogDebug(COMPONENT_DISPATCH,
 				"Socket numbers are: %s tcp=%d udp=%d",
 				tags[p],
-				tcp_socket[p],
-				udp_socket[p]);
+				ndata->tcp_socket[p],
+				ndata->udp_socket[p]);
 		}
+		LogCrit(COMPONENT_DISPATCH, "new socket fd, %s, udp: %d, tcp: %d",
+			tags[p], ndata->udp_socket[p], ndata->tcp_socket[p]);
 	}
 #ifdef RPC_VSOCK
 	if (vsock)
-		allocate_socket_vsock();
+		allocate_socket_vsock(ndata);
 #endif /* RPC_VSOCK */
 }
 
@@ -1224,7 +1332,7 @@ void Clean_RPC(void)
    * TCP based services
    */
 	unregister_rpc();
-	close_rpc_fd();
+	// close_rpc_fd();
 
 	freenetconfigent(netconfig_udpv4);
 	freenetconfigent(netconfig_tcpv4);
@@ -1232,15 +1340,10 @@ void Clean_RPC(void)
 	freenetconfigent(netconfig_tcpv6);
 }
 
-#define UDP_REGISTER(prot, vers, netconfig) \
-	svc_reg(udp_xprt[prot], NFS_program[prot], \
-		(u_long) vers,					    \
-		nfs_rpc_dispatch_dummy, netconfig)
+static struct netbuf nbs[P_COUNT];
 
-#define TCP_REGISTER(prot, vers, netconfig) \
-	svc_reg(tcp_xprt[prot], NFS_program[prot], \
-		(u_long) vers,					    \
-		nfs_rpc_dispatch_dummy, netconfig)
+#define REGISTER(prot, vers, netconfig) \
+	rpcb_set(NFS_program[prot], (u_long) vers, netconfig, &nbs[prot])
 
 #ifdef RPCBIND
 static bool __Register_program(protos prot, int vers)
@@ -1250,7 +1353,7 @@ static bool __Register_program(protos prot, int vers)
 			tags[prot], (int)vers);
 
 		/* XXXX fix svc_register! */
-		if (!UDP_REGISTER(prot, vers, netconfig_udpv4)) {
+		if (!REGISTER(prot, vers, netconfig_udpv4)) {
 			LogMajor(COMPONENT_DISPATCH,
 				 "Cannot register %s V%d on UDP",
 				 tags[prot], (int)vers);
@@ -1261,7 +1364,7 @@ static bool __Register_program(protos prot, int vers)
 			LogInfo(COMPONENT_DISPATCH,
 				"Registering %s V%d/UDPv6",
 				tags[prot], (int)vers);
-			if (!UDP_REGISTER(prot, vers,
+			if (!REGISTER(prot, vers,
 					  netconfig_udpv6)) {
 				LogMajor(COMPONENT_DISPATCH,
 					 "Cannot register %s V%d on UDPv6",
@@ -1275,7 +1378,7 @@ static bool __Register_program(protos prot, int vers)
 	LogInfo(COMPONENT_DISPATCH, "Registering %s V%d/TCP",
 		tags[prot], (int)vers);
 
-	if (!TCP_REGISTER(prot, vers, netconfig_tcpv4)) {
+	if (!REGISTER(prot, vers, netconfig_tcpv4)) {
 		LogMajor(COMPONENT_DISPATCH,
 			 "Cannot register %s V%d on TCP", tags[prot],
 			 (int)vers);
@@ -1285,7 +1388,7 @@ static bool __Register_program(protos prot, int vers)
 	if (!v6disabled && netconfig_tcpv6) {
 		LogInfo(COMPONENT_DISPATCH, "Registering %s V%d/TCPv6",
 			tags[prot], (int)vers);
-		if (!TCP_REGISTER(prot, vers, netconfig_tcpv6)) {
+		if (!REGISTER(prot, vers, netconfig_tcpv6)) {
 			LogMajor(COMPONENT_DISPATCH,
 				 "Cannot register %s V%d on TCPv6",
 				 tags[prot], (int)vers);
@@ -1408,18 +1511,13 @@ void nfs_Init_svc(void)
 		LogFullDebug(COMPONENT_DISPATCH,
 			     "netconfig found for UDPv6 and TCPv6");
 
-	/* Allocate the UDP and TCP sockets for the RPC */
-	Allocate_sockets();
-
 	if ((NFS_options & CORE_OPTION_ALL_NFS_VERS) != 0) {
-		/* Bind the tcp and udp sockets */
-		Bind_sockets();
-
 		/* Unregister from portmapper/rpcbind */
 		unregister_rpc();
 
-		/* Set up well-known xprt handles */
-		Create_SVCXPRTs();
+		ip_address_hashtable = hashtable_init(&ip_address_hash_param);
+
+		v6disabled = true;
 	}
 
 #ifdef _HAVE_GSSAPI
@@ -1450,6 +1548,14 @@ void nfs_Init_svc(void)
 #endif				/* _HAVE_GSSAPI */
 
 #ifdef RPCBIND
+	for (int i = 0; i < P_COUNT; ++i) {
+		nbs[i].len = nbs[i].maxlen = sizeof (struct sockaddr_in);
+		nbs[i].buf = gsh_malloc(nbs[i].len);
+		struct sockaddr_in *addr = nbs[i].buf;
+		addr->sin_family = AF_INET;
+		addr->sin_addr.s_addr = INADDR_ANY;
+		addr->sin_port = htons(nfs_param.core_param.port[i]);
+	}
 	/*
 	 * Perform all the RPC registration, for UDP and TCP, on both NFS_V3
 	 * and NFS_V4. Note that v4 servers are not required to register with
@@ -1592,4 +1698,88 @@ static void free_nfs_request(struct svc_req *req, enum xprt_stat stat)
 	SVC_RELEASE(xprt, SVC_REF_FLAG_NONE);
 
 	(void) atomic_inc_uint64_t(&nfs_health_.dequeued_reqs);
+}
+
+void bind_ipv4_address(uint32_t ip_addr) {
+	network_data *ndata = (network_data *)gsh_malloc(sizeof (network_data));
+	ndata->ip_addr = ip_addr;
+
+	struct in_addr s_addr;
+	s_addr.s_addr = htonl(ip_addr);
+
+	struct gsh_buffdesc buffkey;
+	buffkey.addr = &ndata->ip_addr;
+	buffkey.len = sizeof (ndata->ip_addr);
+	struct gsh_buffdesc buffval;
+	buffval.addr = ndata;
+	buffval.len = sizeof (network_data);
+
+	struct hash_latch latch;
+	hash_error_t rc = hashtable_getlatch(ip_address_hashtable, &buffkey, NULL, true, &latch);
+	switch (rc) {
+	case HASHTABLE_SUCCESS:
+		// this ip already binded, no need to bind again
+		gsh_free(ndata);
+		LogWarn(COMPONENT_DISPATCH, "%s already binded", inet_ntoa(s_addr));
+		break;
+	case HASHTABLE_ERROR_NO_SUCH_KEY:
+		/* Allocate the UDP and TCP sockets for the RPC */
+		Allocate_sockets(ndata);
+
+		/* Bind the tcp and udp sockets */
+		rc = Bind_sockets_V4(ndata, ip_addr);
+		if (rc < 0) {
+			LogFatal(COMPONENT_DISPATCH, "bind failed, rc: %d", rc);
+		}
+
+		/* Set up well-known xprt handles */
+		Create_SVCXPRTs(ndata);
+
+		rc = hashtable_setlatched(ip_address_hashtable, &buffkey, &buffval, &latch, false, NULL, NULL);
+		if (rc != HASHTABLE_SUCCESS) {
+			LogFatal(COMPONENT_DISPATCH, "unexpected error when inserting %s into ip hash table, %s",
+				 inet_ntoa(s_addr), hash_table_err_to_str(rc));
+		}
+
+		LogCrit(COMPONENT_DISPATCH, "%s binded successfully", inet_ntoa(s_addr));
+		break;
+	default:
+		LogFatal(COMPONENT_DISPATCH, "unexpected error when gettting latch, ip: %s, error: %s",
+				inet_ntoa(s_addr), hash_table_err_to_str(rc));
+		break;
+	}
+
+	hashtable_releaselatched(ip_address_hashtable, &latch);
+}
+
+void unbind_ipv4_address(uint32_t ip_addr) {
+	struct in_addr s_addr;
+	s_addr.s_addr = htonl(ip_addr);
+
+	struct gsh_buffdesc buffkey;
+	buffkey.addr = &ip_addr;
+	buffkey.len = sizeof (ip_addr);
+	struct gsh_buffdesc value;
+	struct hash_latch latch;
+	hash_error_t rc = hashtable_getlatch(ip_address_hashtable, &buffkey, &value, true, &latch);
+
+	switch (rc) {
+	case HASHTABLE_SUCCESS:
+		network_data *ndata = value.addr;
+		close_rpc_fd(ndata);
+		gsh_free(ndata);
+		hashtable_deletelatched(ip_address_hashtable, &buffkey, &latch, NULL, NULL);
+		LogCrit(COMPONENT_DISPATCH, "unbind %s successfully", inet_ntoa(s_addr));
+		break;
+
+	case HASHTABLE_ERROR_NO_SUCH_KEY:
+		LogWarn(COMPONENT_DISPATCH, "%s already unbinded", inet_ntoa(s_addr));
+		break;
+
+	default:
+		LogFatal(COMPONENT_DISPATCH, "unexpected error when deleting %s into ip hash table, %s",
+			 inet_ntoa(s_addr), hash_table_err_to_str(rc));
+		break;
+	}
+	hashtable_releaselatched(ip_address_hashtable, &latch);
 }

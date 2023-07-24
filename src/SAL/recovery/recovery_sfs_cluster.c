@@ -5,6 +5,7 @@
 #include "sal_functions.h"
 #include "bsd-base64.h"
 #include "recovery_sfs.h"
+#include "nfs_init.h"
 #include <ctype.h>
 
 #include "sfs_recovery_backend.h"
@@ -183,6 +184,13 @@ static int sfs_start_grace(const char *vip, int event) {
 	gsp.event = event;
 	gsp.ipaddr = (char *)vip;
 
+	// 1. unbind vip
+	uint32_t vip_u32 = ntohl(inet_addr(vip));
+	if (event == EVENT_RELEASE_IP) {
+		unbind_ipv4_address(vip_u32);
+	}
+
+	// 2. start grace
 	int ret;
 	do {
 		ret = nfs_start_grace(&gsp);
@@ -192,6 +200,11 @@ static int sfs_start_grace(const char *vip, int event) {
 			break;
 		}
 	} while (ret);
+
+	// 3. bind vip
+	if (event == EVENT_TAKE_IP) {
+		bind_ipv4_address(vip_u32);
+	}
 
 	return -ret;
 }
@@ -212,7 +225,7 @@ static int sfs_cluster_recovery_init(void)
 	sessionid = sfs_cluster_param.sessionid;
 
 	sfs_recovery_log_init(write_log);
-	int ret = sfs_recovery_backend_init(sessionid, sfs_start_grace);
+	int ret = sfs_recovery_backend_init(sessionid, sfs_start_grace, bind_ipv4_address);
 
 	LogEvent(COMPONENT_INIT,
 		 "creating sfs_cluster recovery database, sessionid: %d", sessionid);
