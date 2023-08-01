@@ -2242,6 +2242,10 @@ state_status_t do_lock_op(struct fsal_obj_handle *obj,
 	if (owner_client != op_ctx->client && owner_client != NULL)
 		op_ctx->client = owner_client;
 
+	if (nfs4_clientid != NULL) {
+		lock->clid = nfs4_clientid->cid_clientid;
+		lock->saddr = nfs4_clientid->cid_client_record->cr_server_addr;
+	}
 	/* Perform this lock operation using the support_ex lock op. */
 	fsal_status = obj->obj_ops->lock_op2(obj, state, owner,
 					    fsal_lock_op, lock,
