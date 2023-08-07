@@ -888,7 +888,7 @@ mdcache_new_entry(struct mdcache_fsal_export *export,
 	 * NOTE: There can not be an ABBA lock ordering issue since our caller
 	 *        does not hold a lock on the "new" entry.
 	 */
-	if (prefer_attrs_in && !FSAL_IS_ERROR(status)) {
+	if (prefer_attrs_in && !FSAL_IS_ERROR(status) && attrs_out != NULL) {
 		PTHREAD_RWLOCK_wrlock(&(*entry)->attr_lock);
 		mdc_update_attr_cache(*entry, attrs_in);
 		PTHREAD_RWLOCK_unlock(&(*entry)->attr_lock);
