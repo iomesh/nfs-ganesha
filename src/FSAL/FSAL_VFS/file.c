@@ -1608,7 +1608,8 @@ fsal_status_t vfs_fallocate(struct fsal_obj_handle *obj_hdl,
 
 fsal_status_t vfs_commit2(struct fsal_obj_handle *obj_hdl,
 			  off_t offset,
-			  size_t len)
+			  size_t len,
+			  uint64_t *cookie)
 {
 	struct vfs_fsal_obj_handle *myself;
 	fsal_status_t status;
