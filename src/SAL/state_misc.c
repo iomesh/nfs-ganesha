@@ -169,6 +169,8 @@ const char *state_err_str(state_status_t err)
 		return "STATE_BADHANDLE";
 	case STATE_BAD_RANGE:
 		return "STATE_BAD_RANGE";
+	case STATE_RECLAIM_BAD:
+		return "STATE_RECLAIM_BAD";
 	}
 	return "unknown";
 }
@@ -272,6 +274,8 @@ state_status_t state_error_convert(fsal_status_t fsal_status)
 
 	case ERR_FSAL_TOOSMALL:
 		return STATE_TOOSMALL;
+	case ERR_FSAL_RECLAIM_BAD:
+		return STATE_RECLAIM_BAD;	
 
 	case ERR_FSAL_DQUOT:
 	case ERR_FSAL_NAMETOOLONG:
@@ -477,6 +481,10 @@ nfsstat4 nfs4_Errno_state(state_status_t error)
 		nfserror = NFS4ERR_BAD_RANGE;
 		break;
 
+	case STATE_RECLAIM_BAD:
+		nfserror = NFS4ERR_RECLAIM_BAD;
+		break;
+		
 	case STATE_INVALID_ARGUMENT:
 	case STATE_INCONSISTENT_ENTRY:
 	case STATE_HASH_TABLE_ERROR:
@@ -642,6 +650,7 @@ nfsstat3 nfs3_Errno_state(state_status_t error)
 	case STATE_GRACE_PERIOD:
 	case STATE_SIGNAL_ERROR:
 	case STATE_BAD_RANGE:
+	case STATE_RECLAIM_BAD:
 		/* Should not occur */
 		LogCrit(COMPONENT_NFSPROTO,
 			"Unexpected status for conversion = %s",
