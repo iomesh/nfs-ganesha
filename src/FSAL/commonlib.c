@@ -334,6 +334,8 @@ const char *msg_fsal_err(fsal_errors_t fsal_err)
 		return "No such xattr";
 	case ERR_FSAL_XATTR2BIG:
 		return "Xattr too big";
+	case ERR_FSAL_RECLAIM_BAD:
+		return "Reclaim Bad";	
 	}
 
 	return "Unknown FSAL error";

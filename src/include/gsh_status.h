@@ -87,6 +87,7 @@ typedef enum state_status {
 	STATE_IN_GRACE,
 	STATE_BADHANDLE,
 	STATE_BAD_RANGE,
+	STATE_RECLAIM_BAD,
 } state_status_t;
 
 #define STATE_FSAL_ESTALE STATE_ESTALE
