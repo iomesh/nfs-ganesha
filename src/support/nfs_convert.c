@@ -790,6 +790,10 @@ nfsstat4 nfs4_Errno_verbose(fsal_status_t status, const char *where)
 		nfserror = NFS4ERR_XATTR2BIG;
 		break;
 
+	case ERR_FSAL_RECLAIM_BAD:
+		nfserror = NFS4ERR_RECLAIM_BAD;
+		break;
+
 	case ERR_FSAL_CROSS_JUNCTION:
 	case ERR_FSAL_NO_ACE:
 	case ERR_FSAL_STILL_IN_USE:
@@ -958,6 +962,7 @@ nfsstat3 nfs3_Errno_verbose(fsal_status_t status, const char *where)
 		nfserror = NFS3ERR_JUKEBOX;
 		break;
 
+	case ERR_FSAL_RECLAIM_BAD:
 	case ERR_FSAL_CROSS_JUNCTION:
 	case ERR_FSAL_BLOCKED:
 	case ERR_FSAL_INTERRUPT:
