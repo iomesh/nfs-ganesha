@@ -541,6 +541,7 @@ nfs_client_id_t *create_client_id(clientid4 clientid,
 	client_rec->cid_clientid = clientid;
 	client_rec->cid_last_renew = time(NULL);
 	client_rec->cid_client_record = client_record;
+	client_rec->cid_server_addr = client_record->cr_server_addr;
 	client_rec->cid_credential = *credential;
 
 	/* We store the credential which includes gss context here for
