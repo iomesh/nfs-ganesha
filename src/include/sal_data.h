@@ -686,6 +686,7 @@ typedef enum clientid_status {
 
 struct nfs_client_id_t {
 	clientid4 cid_clientid;	/*< The clientid */
+	uint32_t cid_server_addr;
 	verifier4 cid_verifier;	/*< Known verifier */
 	verifier4 cid_incoming_verifier; /*< Most recently supplied verifier */
 	time_t cid_last_renew;	/*< Time of last renewal */

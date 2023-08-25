@@ -1054,7 +1054,7 @@ static int ip_match(char *ip, nfs_client_id_t *cid)
 	in_addr_t saddr = inet_addr(ip);
 	saddr = ntohl(saddr);
 
-	return (uint32_t)saddr == cid->cid_client_record->cr_server_addr;
+	return (uint32_t)saddr == cid->cid_server_addr;
 }
 
 /*

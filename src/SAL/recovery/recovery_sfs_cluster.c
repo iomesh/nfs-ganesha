@@ -139,12 +139,12 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 	}
 
 	struct in_addr s_addr;
-	s_addr.s_addr = htonl(clientid->cid_client_record->cr_server_addr);
+	s_addr.s_addr = htonl(clientid->cid_server_addr);
 	char str_server_addr[INET_ADDRSTRLEN];
 	const char *addr = inet_ntop(AF_INET, &s_addr, str_server_addr, INET_ADDRSTRLEN);
 	if (unlikely(addr == NULL)) {
 		LogFatal(COMPONENT_CLIENTID, "invalid server address: %u",
-			 clientid->cid_client_record->cr_server_addr);
+			 clientid->cid_server_addr);
 	}
 
 	int str_server_addr_len = strlen(str_server_addr);
@@ -265,7 +265,7 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 	recov_tag = sfs_cluster_create_val(clientid, NULL);
 
 	ret = sfs_recovery_add_clid(clientid->cid_clientid,
-		clientid->cid_client_record->cr_server_addr, (const char*)recov_tag);
+		clientid->cid_server_addr, (const char*)recov_tag);
 
 	if (ret < 0) {
 		LogFatal(COMPONENT_CLIENTID, "Failed to add clid %lu",
@@ -280,7 +280,7 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 static void sfs_cluster_rm_clid(nfs_client_id_t *clientid)
 {
 	// rust will panic if rm clid failed
-	sfs_recovery_rm_clid(clientid->cid_clientid, clientid->cid_client_record->cr_server_addr);
+	sfs_recovery_rm_clid(clientid->cid_clientid, clientid->cid_server_addr);
 
 	char *recov_tag = clientid->cid_recov_tag;
 	clientid->cid_recov_tag = NULL;
@@ -298,7 +298,7 @@ static void sfs_cluster_add_revoke_fh(nfs_client_id_t *delr_clid, nfs_fh4 *delr_
 	assert(ret != -1);
 
 	// rust will panic if this function failed
-	sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, delr_clid->cid_client_record->cr_server_addr,
+	sfs_recovery_add_revoke_fh(delr_clid->cid_clientid, delr_clid->cid_server_addr,
 					(const char*)rfhstr);
 }
 
