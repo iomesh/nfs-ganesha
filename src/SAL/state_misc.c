@@ -168,7 +168,7 @@ const char *state_err_str(state_status_t err)
 	case STATE_BADHANDLE:
 		return "STATE_BADHANDLE";
 	case STATE_BAD_RANGE:
-		return "STATE_BAD_RANGE";	
+		return "STATE_BAD_RANGE";
 	case STATE_RECLAIM_BAD:
 		return "STATE_RECLAIM_BAD";
 	}
