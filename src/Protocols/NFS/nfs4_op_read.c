@@ -50,6 +50,10 @@
 #include "export_mgr.h"
 #include "gsh_rpc.h"
 
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif
+
 struct nfs4_read_data {
 	/** Results for read */
 	READ4res *res_READ4;
@@ -757,7 +761,13 @@ static enum nfs_req_result nfs4_read(struct nfs_argop4 *op,
 again:
 
 	/* Do the actual read */
+#ifdef USE_MINITRACE
+	mtr_loc_span ls = mtr_create_loc_span_enter("obj_ops->read2");
+#endif
 	obj->obj_ops->read2(obj, bypass, nfs4_read_cb, read_arg, read_data);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(ls);
+#endif
 
 	/* Only atomically set the flags if we actually call read2, otherwise
 	 * we will have indicated as having been DONE.
@@ -824,14 +834,26 @@ enum nfs_req_result nfs4_op_read(struct nfs_argop4 *op, compound_data_t *data,
 		return op_dsread(op, data, resp);
 	}
 
+#ifdef USE_MINITRACE
+	mtr_loc_span nfs4_read_span = mtr_create_loc_span_enter("nfs4_read");
+#endif
 	rc = nfs4_read(op, data, resp, IO_READ, NULL);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(nfs4_read_span);
+#endif
 
 	/* We need to complete the request now if we didn't async wait and
 	 * op_data (read_data) is present.
 	 */
 	if (rc != NFS_REQ_ASYNC_WAIT && data->op_data != NULL) {
 		/* Go ahead and complete the read. */
+#ifdef USE_MINITRACE
+		mtr_loc_span ls = mtr_create_loc_span_enter("nfs4_complete_read");
+#endif
 		rc = nfs4_complete_read(data->op_data);
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_span(ls);
+#endif
 	}
 
 	if (rc != NFS_REQ_ASYNC_WAIT && data->op_data != NULL) {

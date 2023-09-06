@@ -50,6 +50,10 @@
 #include "gsh_lttng/nfs_rpc.h"
 #endif
 
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif
+
 static enum nfs_req_result nfs4_default_resume(struct nfs_argop4 *op,
 					       compound_data_t *data,
 					       struct nfs_resop4 *resp)
@@ -745,6 +749,9 @@ out:
 
 enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 {
+#ifdef USE_MINITRACE
+	mtr_loc_span local_span = mtr_create_loc_span_enter("process_one_op");
+#endif
 	const char *bad_op_state_reason = "";
 	int perm_flags;
 	log_components_t alt_component = COMPONENT_NFS_V4;
@@ -898,6 +905,9 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 
 		/* Do not manage the other requests in the COMPOUND. */
 		res_compound4->resarray.resarray_len = data->oppos + 1;
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_span(local_span);
+#endif
 		return NFS_REQ_ERROR;
 	}
 
@@ -909,15 +919,30 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 		   data->opcode, data->opname);
 #endif
 
+#ifdef USE_MINITRACE
+	mtr_loc_span op_funct_span = mtr_create_loc_span_enter(data->opname);
+#endif
 	result = (optabv4[data->opcode].funct) (thisarg, data, thisres);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(op_funct_span);
+#endif
 
 	if (result != NFS_REQ_ASYNC_WAIT) {
 		/* Complete the operation, otherwise return without doing
 		 * anything else.
 		 */
+#ifdef USE_MINITRACE
+	mtr_loc_span op_complete_span = mtr_create_loc_span_enter("complete_op");
+#endif
 		result = complete_op(data, status, result);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(op_complete_span);
+#endif
 	}
 
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(local_span);
+#endif
 	return result;
 }
 
@@ -1169,6 +1194,9 @@ uint32_t get_nfs4_opcodes(compound_data_t *data, nfs_opnum4 *opcodes,
 
 int nfs4_Compound(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 {
+#ifdef USE_MINITRACE
+	mtr_loc_span local_span = mtr_create_loc_span_enter("nfs4_Compound");
+#endif
 	nfsstat4 status = NFS4_OK;
 	compound_data_t *data = NULL;
 	const uint32_t compound4_minor = arg->arg_compound4.minorversion;
@@ -1382,6 +1410,10 @@ int nfs4_Compound(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 			 * already been set up before we started processing
 			 * ops on this request at all.
 			 */
+#ifdef USE_MINITRACE
+			// TODO(Guorui Wen): Trace suspended requests
+			mtr_destroy_loc_span(local_span);
+#endif
 			return result;
 		}
 	}
@@ -1395,6 +1427,9 @@ out:
 	/* release current active export in op_ctx. */
 	if (op_ctx->ctx_export)
 		clear_op_context_export();
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(local_span);
+#endif
 
 	return drop ? NFS_REQ_DROP : NFS_REQ_OK;
 }				/* nfs4_Compound */

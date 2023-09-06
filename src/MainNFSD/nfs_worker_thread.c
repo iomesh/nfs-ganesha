@@ -66,6 +66,10 @@
 #include "gsh_lttng/nfs_rpc.h"
 #endif
 
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif
+
 #define NFS_pcp nfs_param.core_param
 #define NFS_options NFS_pcp.core_options
 #define NFS_program NFS_pcp.program
@@ -742,6 +746,9 @@ void free_args(nfs_request_t *reqdata)
 enum nfs_req_result complete_request(nfs_request_t *reqdata,
 				     enum nfs_req_result rc)
 {
+#ifdef USE_MINITRACE
+	mtr_loc_span local_span = mtr_create_loc_span_enter("complete_request");
+#endif
 	SVCXPRT *xprt = reqdata->svc.rq_xprt;
 	const nfs_function_desc_t *reqdesc = reqdata->funcdesc;
 
@@ -768,6 +775,9 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 		 * normally cached that has been dropped.
 		 */
 		nfs_dupreq_delete(reqdata, rc);
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_span(local_span);
+#endif
 		return rc;
 	}
 
@@ -807,6 +817,9 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 
 	/* Finish any request not already deleted */
 	nfs_dupreq_finish(reqdata, rc);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(local_span);
+#endif
 	return rc;
 }
 
@@ -894,6 +907,12 @@ enum nfs_req_result process_dupreq(nfs_request_t *reqdata,
 static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 					      bool retry)
 {
+#ifdef USE_MINITRACE
+	minitrace_init();
+	mtr_span_ctx span_ctx = mtr_create_rand_span_ctx();
+	mtr_span root_span = mtr_create_root_span("nfs_rpc_process_request", span_ctx);
+	mtr_loc_par_guar local_parent_guard = mtr_set_loc_par_to_span(&root_span);
+#endif
 	const char *client_ip = "<unknown client>";
 	const char *progname = "unknown";
 	const nfs_function_desc_t *reqdesc = reqdata->funcdesc;
@@ -931,6 +950,10 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			"HAProxy connection from %s rejected",
 			addr);
 
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_par_guar(local_parent_guard);
+		mtr_destroy_span(root_span);
+#endif
 		return svcerr_auth(&reqdata->svc, AUTH_FAILED);
 	}
 
@@ -960,6 +983,10 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 		LogInfo(COMPONENT_DISPATCH,
 			"Could not authenticate request... rejecting with AUTH_STAT=%s",
 			auth_stat2str(auth_rc));
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_par_guar(local_parent_guard);
+		mtr_destroy_span(root_span);
+#endif
 		return svcerr_auth(&reqdata->svc, auth_rc);
 #ifdef _HAVE_GSSAPI
 	} else if (reqdata->svc.rq_msg.RPCM_ack.ar_verf.oa_flavor
@@ -973,7 +1000,13 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			     no_dispatch, gc->gc_proc,
 			     str_gc_proc(gc->gc_proc));
 		if (no_dispatch)
+		{
+#ifdef USE_MINITRACE
+			mtr_destroy_loc_par_guar(local_parent_guard);
+			mtr_destroy_span(root_span);
+#endif
 			return SVC_STAT(xprt);
+		}
 	} else if (no_dispatch) {
 		LogFullDebug(COMPONENT_DISPATCH,
 			     "RPCSEC_GSS no_dispatch=%d", no_dispatch);
@@ -983,9 +1016,19 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 				reqdata->svc.rq_msg.rq_cred_body;
 
 			if (gc->gc_proc == RPCSEC_GSS_DATA)
+			{
+#ifdef USE_MINITRACE
+				mtr_destroy_loc_par_guar(local_parent_guard);
+				mtr_destroy_span(root_span);
+#endif
 				return svcerr_auth(&reqdata->svc,
 						   RPCSEC_GSS_CREDPROBLEM);
+			}
 		}
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_par_guar(local_parent_guard);
+		mtr_destroy_span(root_span);
+#endif
 		return SVC_STAT(xprt);
 #endif
 	}
@@ -1021,6 +1064,10 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 				__func__,
 				reqdesc->funcname);
 		}
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_par_guar(local_parent_guard);
+		mtr_destroy_span(root_span);
+#endif
 		return svcerr_decode(&reqdata->svc);
 	}
 
@@ -1105,6 +1152,10 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			 * ops on this request at all.
 			 */
 			suspend_op_context();
+#ifdef USE_MINITRACE
+			mtr_destroy_loc_par_guar(local_parent_guard);
+			mtr_destroy_span(root_span);
+#endif
 			return XPRT_SUSPEND;
 
 		case DUPREQ_DROP:
@@ -1525,6 +1576,10 @@ retry_after_drc_suspend:
 			 * ops on this request at all.
 			 */
 			suspend_op_context();
+#ifdef USE_MINITRACE
+			mtr_destroy_loc_par_guar(local_parent_guard);
+			mtr_destroy_span(root_span);
+#endif
 			return XPRT_SUSPEND;
 		}
 
@@ -1547,6 +1602,11 @@ retry_after_drc_suspend:
 	/* Make sure we return to ntirpc without op_ctx set, or saved_op_ctx can
 	 * point to freed memory */
 	op_ctx = NULL;
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_par_guar(local_parent_guard);
+	mtr_destroy_span(root_span);
+	// mtr_flush();
+#endif
 	return SVC_STAT(xprt);
 }
 

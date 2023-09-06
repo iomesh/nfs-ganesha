@@ -80,6 +80,9 @@
 #ifdef USE_MONITORING
 #include "monitoring.h"
 #endif  /* USE_MONITORING */
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif  /* USE_MINITRACE */
 
 /* parameters for NFSd startup and default values */
 
@@ -162,6 +165,9 @@ int main(int argc, char *argv[])
 #endif
 	sigset_t signals_to_block;
 	struct config_error_type err_type;
+// #ifdef USE_MINITRACE
+// 	minitrace_init();
+// #endif  /* USE_MINITRACE */
 
 	/* Set the server's boot time and epoch */
 	now(&nfs_ServerBootTime);
@@ -503,6 +509,10 @@ int main(int argc, char *argv[])
 #ifdef USE_MONITORING
 	monitoring_init(nfs_param.core_param.monitoring_port);
 #endif  /* USE_MONITORING */
+
+// #ifdef USE_MINITRACE
+// 	minitrace_init();
+// #endif  /* USE_MINITRACE */
 
 	/* initialize core subsystems and data structures */
 	if (init_server_pkgs() != 0) {

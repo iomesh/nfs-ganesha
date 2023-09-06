@@ -151,6 +151,13 @@ if(USE_MONITORING)
   )
 endif(USE_MONITORING)
 
+if(USE_MINITRACE)
+  set(ganesha_nfsd_OBJS
+    ${ganesha_nfsd_OBJS}
+    $<TARGET_OBJECTS:minitrace>
+  )
+endif(USE_MINITRACE)
+
 if(USE_DBUS)
   set(ganesha_nfsd_OBJS
     ${ganesha_nfsd_OBJS}
@@ -198,6 +205,7 @@ target_link_libraries(ganesha_nfsd
   ${LTTNG_LIBRARIES}
   ${MOOSHIKA_LIBRARIES}
   ${MONITORING_LIBRARIES}
+  ${MINITRACE_LIBRARIES}
   sfs_recovery_backend
   -L${PATH_LIBSFS}
 )

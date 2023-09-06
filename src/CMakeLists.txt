@@ -308,6 +308,17 @@ if(USE_MONITORING)
   )
 endif(USE_MONITORING)
 
+# OpenTelemetry
+goption(USE_MINITRACE "Build telemetry stack" OFF)
+gopt_test(USE_MINITRACE)
+if(USE_MINITRACE)
+  find_package(minitrace_c 0.5.1 CONFIG REQUIRED)
+  set(MINITRACE_LIBRARIES
+    minitrace_c
+    minitrace_rust
+  )
+endif(USE_MINITRACE)
+
 # nTIRPC
 option(USE_SYSTEM_NTIRPC "Use the system nTIRPC, rather than the submodule" OFF)
 option (USE_GSS "enable RPCSEC_GSS support" ON)
@@ -1263,6 +1274,9 @@ add_subdirectory(os)
 if(USE_MONITORING)
   add_subdirectory(monitoring)
 endif(USE_MONITORING)
+if(USE_MINITRACE)
+  add_subdirectory(minitrace)
+endif(USE_MINITRACE)
 
 add_subdirectory(FSAL)
 add_subdirectory(idmapper)
@@ -1329,6 +1343,7 @@ message(STATUS "ENABLE_VFS_DEBUG_ACL = ${ENABLE_VFS_DEBUG_ACL}")
 message(STATUS "ENABLE_RFC_ACL = ${ENABLE_RFC_ACL}")
 message(STATUS "CEPHFS_POSIX_ACL = ${CEPHFS_POSIX_ACL}")
 message(STATUS "USE_MONITORING = ${USE_MONITORING}")
+message(STATUS "USE_MINITRACE = ${USE_MINITRACE}")
 message(STATUS "USE_CAPS = ${USE_CAPS}")
 message(STATUS "USE_BLKID = ${USE_BLKID}")
 message(STATUS "DISTNAME_HAS_GIT_DATA = ${DISTNAME_HAS_GIT_DATA}" )
@@ -1680,6 +1695,7 @@ target_link_libraries(ganesha.nfsd
   ${LTTNG_LIBRARIES}
   ${LDFLAG_DISALLOW_UNDEF}
   ${MONITORING_LIBRARIES}
+  ${MINITRACE_LIBRARIES}
 )
 set_target_properties(ganesha.nfsd PROPERTIES COMPILE_FLAGS "-fPIC")
 install(TARGETS ganesha.nfsd COMPONENT daemon DESTINATION bin)
