@@ -1680,7 +1680,7 @@ proxyv3_readdir_process_entries(entryplus3 *entry,
 
 static fsal_status_t
 proxyv3_readdir(struct fsal_obj_handle *dir_hdl,
-		fsal_cookie_t *whence, void *cbarg,
+		fsal_cookie_t *whence, size_t sz, void *cbarg,
 		fsal_readdir_cb cb, attrmask_t attrmask,
 		bool *eof)
 {

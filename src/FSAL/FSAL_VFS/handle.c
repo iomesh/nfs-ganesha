@@ -1369,7 +1369,7 @@ static fsal_status_t linkfile(struct fsal_obj_handle *obj_hdl,
  */
 
 static fsal_status_t read_dirents(struct fsal_obj_handle *dir_hdl,
-				  fsal_cookie_t *whence, void *dir_state,
+				  fsal_cookie_t *whence, size_t sz, void *dir_state,
 				  fsal_readdir_cb cb, attrmask_t attrmask,
 				  bool *eof)
 {

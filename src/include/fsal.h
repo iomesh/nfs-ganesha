@@ -328,7 +328,7 @@ bool fsal_create_verify(struct fsal_obj_handle *obj, uint32_t verf_hi,
 
 fsal_status_t fsal_readdir(struct fsal_obj_handle *directory, uint64_t cookie,
 			   unsigned int *nbfound, bool *eod_met,
-			   attrmask_t attrmask, helper_readdir_cb cb,
+			   attrmask_t attrmask, size_t sz, helper_readdir_cb cb,
 			   void *opaque);
 fsal_status_t fsal_remove(struct fsal_obj_handle *parent, const char *name);
 fsal_status_t fsal_rename(struct fsal_obj_handle *dir_src,

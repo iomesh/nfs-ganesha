@@ -556,6 +556,7 @@ enum nfs_req_result nfs4_op_readdir(struct nfs_argop4 *op,
 
 	/* Dont over flow V4.1 maxresponsesize or maxcachedsize */
 	maxcount = resp_room(data);
+	LogDebug(COMPONENT_NFS_READDIR,"maxcout from resp_room:%lu, readdir_res_size:%u, arg_READDIR4 maxcount:%u, ",maxcount, nfs_param.core_param.readdir_res_size, arg_READDIR4->maxcount);
 
 	if (nfs_param.core_param.readdir_res_size < maxcount)
 		maxcount = nfs_param.core_param.readdir_res_size;
@@ -675,13 +676,15 @@ enum nfs_req_result nfs4_op_readdir(struct nfs_argop4 *op,
 	if (attribute_is_set(tracker.req_attr, FATTR4_SEC_LABEL) &&
 	    op_ctx_export_has_option(EXPORT_OPTION_SECLABEL_SET))
 		attrmask |= ATTR4_SEC_LABEL;
-
+ 
+	LogDebug(COMPONENT_NFS_READDIR,"mem_avail: %lu",tracker.mem_avail);
 	/* Perform the readdir operation */
 	fsal_status = fsal_readdir(dir_obj,
 				   cookie,
 				   &num_entries,
 				   &eod_met,
 				   attrmask,
+				   tracker.mem_avail,
 				   nfs4_readdir_callback,
 				   &tracker);
 

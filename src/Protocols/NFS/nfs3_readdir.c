@@ -301,7 +301,7 @@ int nfs3_readdir(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	/* Call readdir */
 	fsal_status = fsal_readdir(dir_obj, fsal_cookie, &num_entries, &eod_met,
 				   0,	/* no attr */
-				   nfs3_readdir_callback, &tracker);
+				   tracker.mem_avail, nfs3_readdir_callback, &tracker);
 
 	if (FSAL_IS_ERROR(fsal_status)) {
 		if (nfs_RetryableError(fsal_status.major)) {

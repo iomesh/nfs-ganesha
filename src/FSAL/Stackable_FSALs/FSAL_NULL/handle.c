@@ -346,7 +346,7 @@ static enum fsal_dir_result nullfs_readdir_cb(
  */
 
 static fsal_status_t read_dirents(struct fsal_obj_handle *dir_hdl,
-				  fsal_cookie_t *whence, void *dir_state,
+				  fsal_cookie_t *whence, size_t sz, void *dir_state,
 				  fsal_readdir_cb cb, attrmask_t attrmask,
 				  bool *eof)
 {
@@ -368,7 +368,7 @@ static fsal_status_t read_dirents(struct fsal_obj_handle *dir_hdl,
 	op_ctx->fsal_export = export->export.sub_export;
 	fsal_status_t status =
 		handle->sub_handle->obj_ops->readdir(handle->sub_handle,
-		whence, &cb_state, nullfs_readdir_cb, attrmask, eof);
+		whence, sz, &cb_state, nullfs_readdir_cb, attrmask, eof);
 	op_ctx->fsal_export = &export->export;
 
 	return status;

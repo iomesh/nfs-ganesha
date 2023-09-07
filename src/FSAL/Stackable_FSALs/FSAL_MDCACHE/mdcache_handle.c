@@ -542,7 +542,7 @@ static fsal_status_t mdcache_link(struct fsal_obj_handle *obj_hdl,
  * @return FSAL status
  */
 static fsal_status_t mdcache_readdir(struct fsal_obj_handle *dir_hdl,
-				  fsal_cookie_t *whence, void *dir_state,
+				  fsal_cookie_t *whence, size_t sz, void *dir_state,
 				  fsal_readdir_cb cb, attrmask_t attrmask,
 				  bool *eod_met)
 {
@@ -553,7 +553,7 @@ static fsal_status_t mdcache_readdir(struct fsal_obj_handle *dir_hdl,
 
 	if (mdcache_param.dir.avl_chunk == 0) {
 		/* Not caching dirents; pass through directly to FSAL */
-		return mdcache_readdir_uncached(directory, whence, dir_state,
+		return mdcache_readdir_uncached(directory, whence, sz, dir_state,
 						cb, attrmask, eod_met);
 	} else {
 		/* Dirent chunking is enabled. */
@@ -562,7 +562,7 @@ static fsal_status_t mdcache_readdir(struct fsal_obj_handle *dir_hdl,
 			    whence ? *whence : (uint64_t) 0);
 
 		return mdcache_readdir_chunked(directory,
-					       whence ? *whence : (uint64_t) 0,
+					       whence ? *whence : (uint64_t) 0, sz,
 					       dir_state, cb, attrmask,
 					       eod_met);
 	}

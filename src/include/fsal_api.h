@@ -1649,6 +1649,7 @@ struct fsal_obj_ops {
  */
 	 fsal_status_t (*readdir)(struct fsal_obj_handle *dir_hdl,
 				  fsal_cookie_t *whence,
+				  size_t sz,
 				  void *dir_state,
 				  fsal_readdir_cb cb,
 				  attrmask_t attrmask,
