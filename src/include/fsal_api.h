@@ -1512,6 +1512,7 @@ typedef enum fsal_dir_result (*fsal_readdir_cb)(
 struct fsal_io_arg {
 	size_t io_amount;	/**< Total amount of I/O actually done */
 	uint64_t write_cookie;
+	uint64_t span_context[3];
 	struct io_info *info;	/**< More info about data for read_plus */
 	void *cbi;		/**< FSAL specific call back info */
 	int fsal_resume;	/**< If non-zero, FSAL requests a resume

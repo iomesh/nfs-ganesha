@@ -745,6 +745,10 @@ static enum nfs_req_result nfs4_read(struct nfs_argop4 *op,
 	read_arg->iov[0].iov_base = bufferdata;
 	read_arg->io_amount = 0;
 	read_arg->end_of_file = false;
+#ifdef USE_MINITRACE
+	mtr_span_ctx ctx = mtr_create_span_ctx_loc();
+	memcpy(read_arg->span_context, &ctx, sizeof(mtr_span_ctx));
+#endif
 
 	read_data->res_READ4 = res_READ4;
 	read_data->owner = owner;
