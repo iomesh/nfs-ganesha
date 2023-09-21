@@ -910,7 +910,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 #ifdef USE_MINITRACE
 	minitrace_init();
 	mtr_span_ctx span_ctx = mtr_create_rand_span_ctx();
-	mtr_span root_span = mtr_create_root_span("nfs_rpc_process_request", span_ctx);
+	mtr_span root_span = mtr_create_root_span_with_prob("nfs_rpc_process_request", span_ctx, 0.01);
 	mtr_loc_par_guar local_parent_guard = mtr_set_loc_par_to_span(&root_span);
 #endif
 	const char *client_ip = "<unknown client>";
