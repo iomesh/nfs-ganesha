@@ -1557,7 +1557,8 @@ static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs)
 #ifdef USE_MINITRACE
 	minitrace_init();
 	mtr_span_ctx span_ctx = mtr_create_rand_span_ctx();
-	reqdata->root_span = mtr_create_root_span_with_prob("alloc_nfs_request", span_ctx, 0.01);
+	// Create a non-empty root span with probability given by the environment variable MINITRACE_SAMPLE_RATIO
+	reqdata->root_span = mtr_create_root_span_with_preset_prob("alloc_nfs_request", span_ctx);
 #endif  /* USE_MINITRACE */
 
 	/* set up req */
