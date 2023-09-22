@@ -49,6 +49,9 @@
 #include "nfs4.h"
 #include "nlm4.h"
 #include "nfsacl.h"
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif  /* USE_MINITRACE */
 
 /* ------------------------------ Typedefs and structs----------------------- */
 
