@@ -455,6 +455,7 @@ static fsal_status_t makedir(struct fsal_obj_handle *dir_hdl,
 
 static fsal_status_t read_dirents(struct fsal_obj_handle *dir_hdl,
 				  fsal_cookie_t *whence,
+				  size_t sz,
 				  void *dir_state,
 				  fsal_readdir_cb cb,
 				  attrmask_t attrmask,

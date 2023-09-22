@@ -756,6 +756,8 @@ mdcache_new_entry(struct mdcache_fsal_export *export,
 		/* Release the subtree hash table lock */
 		cih_hash_release(&latch);
 
+		/* We found the entry in cache, let's reset the status */
+		status = fsalstat(ERR_FSAL_NO_ERROR, 0);
 		goto out_release_new_entry;
 	}
 
@@ -893,7 +895,9 @@ mdcache_new_entry(struct mdcache_fsal_export *export,
 		mdc_update_attr_cache(*entry, attrs_in);
 		PTHREAD_RWLOCK_unlock(&(*entry)->attr_lock);
 
-		fsal_copy_attrs(attrs_out, attrs_in, false);
+		if (attrs_out != NULL) {
+			fsal_copy_attrs(attrs_out, attrs_in, false);
+		}
 	} else if (!FSAL_IS_ERROR(status) && attrs_out != NULL) {
 		status = get_optional_attrs(&(*entry)->obj_handle,
 					    attrs_out);
@@ -1744,7 +1748,7 @@ mdc_readdir_uncached_cb(const char *name, struct fsal_obj_handle *sub_handle,
  * @return FSAL status
  */
 fsal_status_t
-mdcache_readdir_uncached(mdcache_entry_t *directory, fsal_cookie_t *whence,
+mdcache_readdir_uncached(mdcache_entry_t *directory, fsal_cookie_t *whence, size_t sz,
 			 void *dir_state, fsal_readdir_cb cb,
 			 attrmask_t attrmask, bool *eod_met)
 {
@@ -1760,7 +1764,7 @@ mdcache_readdir_uncached(mdcache_entry_t *directory, fsal_cookie_t *whence,
 
 	subcall(
 		readdir_status = directory->sub_handle->obj_ops->readdir(
-			directory->sub_handle, whence, &state,
+			directory->sub_handle, whence, sz, &state,
 			mdc_readdir_uncached_cb, attrmask, eod_met)
 	       );
 
@@ -2568,6 +2572,7 @@ static struct dir_chunk *mdcache_skip_chunks(mdcache_entry_t *directory,
 
 fsal_status_t mdcache_populate_dir_chunk(mdcache_entry_t *directory,
 					 fsal_cookie_t whence,
+					 size_t sz,
 					 mdcache_dir_entry_t **dirent,
 					 struct dir_chunk *prev_chunk,
 					 bool *eod_met)
@@ -2687,7 +2692,7 @@ again:
 #endif
 	subcall(
 		readdir_status = directory->sub_handle->obj_ops->readdir(
-			directory->sub_handle, whence_ptr, &state,
+			directory->sub_handle, whence_ptr, sz, &state,
 			mdc_readdir_chunked_cb, attrmask, eod_met)
 	       );
 
@@ -2909,6 +2914,7 @@ again:
 
 fsal_status_t mdcache_readdir_chunked(mdcache_entry_t *directory,
 				      fsal_cookie_t whence,
+					  size_t sz,
 				      void *dir_state,
 				      fsal_readdir_cb cb,
 				      attrmask_t attrmask,
@@ -3049,7 +3055,7 @@ again:
 		 *       an empty directory, we don't consider that here, and
 		 *       will re-read the directory.
 		 */
-		status = mdcache_populate_dir_chunk(directory, next_ck,
+		status = mdcache_populate_dir_chunk(directory, next_ck, sz,
 						    &dirent, chunk, &eod);
 
 		if (FSAL_IS_ERROR(status)) {

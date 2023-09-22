@@ -328,7 +328,7 @@ bool fsal_create_verify(struct fsal_obj_handle *obj, uint32_t verf_hi,
 
 fsal_status_t fsal_readdir(struct fsal_obj_handle *directory, uint64_t cookie,
 			   unsigned int *nbfound, bool *eod_met,
-			   attrmask_t attrmask, helper_readdir_cb cb,
+			   attrmask_t attrmask, size_t sz, helper_readdir_cb cb,
 			   void *opaque);
 fsal_status_t fsal_remove(struct fsal_obj_handle *parent, const char *name);
 fsal_status_t fsal_rename(struct fsal_obj_handle *dir_src,
@@ -666,6 +666,14 @@ struct fd_lru_parameter {
 	/** Base interval in seconds between runs of the LRU cleaner
 	    thread. Defaults to 60, settable with LRU_Run_Interval. */
 	uint32_t lru_run_interval;
+	/**  If Cache_FDs is false then FDs will remained cached till the LRU
+	 *   reaper thread invokes and tries to close the FDs.
+	 *
+	 *   If Cache_FDs is true (default) then FDs get cached and LRU reaper
+	 *   thread on invocation will try to close the FDs only when the
+	 *   currentopen >= fds_lowat (FD low watermark).
+	 */
+	bool Cache_FDs;
 	/** The percentage of the system-imposed maximum of file
 	    descriptors at which Ganesha will deny requests.
 	    Defaults to 99, settable with FD_Limit_Percent. */

@@ -1310,6 +1310,7 @@ fsal_status_t fsal_readdir(struct fsal_obj_handle *directory,
 		    unsigned int *nbfound,
 		    bool *eod_met,
 		    attrmask_t attrmask,
+			size_t sz,
 		    helper_readdir_cb cb,
 		    void *opaque)
 {
@@ -1376,6 +1377,7 @@ fsal_status_t fsal_readdir(struct fsal_obj_handle *directory,
 	state.attrmask = attrmask;
 
 	fsal_status = directory->obj_ops->readdir(directory, &cookie,
+						 sz,
 						 (void *)&state,
 						 populate_dirent,
 						 attrmask,

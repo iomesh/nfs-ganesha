@@ -137,6 +137,8 @@ NFS_CORE_PARAM {}
 
 	Enable_NLM(bool, default true)
 
+	Disable_NLM_SHARE(bool, default false)
+
 	Enable_RQUOTA(bool, default true)
 
 	Enable_NFSACL(bool, default false)
@@ -804,6 +806,8 @@ MDCACHE {}
 	Entries_Release_Size(uint32, range 0 to UINT32_MAX, default 100)
 
 	LRU_Run_Interval(uint32, range 1 to 24 * 3600, default 90)
+
+	Cache_FDs(bool, true)
 
 	FD_Limit_Percent(uint32, range 0 to 100, default 99)
 
