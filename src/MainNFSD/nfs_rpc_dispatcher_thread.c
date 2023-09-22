@@ -1554,6 +1554,12 @@ static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs)
 		nfs_health_.enqueued_reqs - nfs_health_.dequeued_reqs);
 #endif /* USE_MONITORING*/
 
+#ifdef USE_MINITRACE
+	minitrace_init();
+	mtr_span_ctx span_ctx = mtr_create_rand_span_ctx();
+	reqdata->root_span = mtr_create_root_span_with_prob("alloc_nfs_request", span_ctx, 0.01);
+#endif  /* USE_MINITRACE */
+
 	/* set up req */
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	reqdata->svc.rq_xprt = xprt;
@@ -1596,6 +1602,10 @@ static void free_nfs_request(struct svc_req *req, enum xprt_stat stat)
 	LogFullDebug(COMPONENT_DISPATCH,
 		     "%s: %p fd %d xp_refcnt %" PRIu32,
 		     __func__, xprt, xprt->xp_fd, xprt->xp_refcnt);
+
+#ifdef USE_MINITRACE
+	mtr_destroy_span(reqdata->root_span);
+#endif  /* USE_MINITRACE */
 
 	gsh_free(reqdata);
 

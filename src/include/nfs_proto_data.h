@@ -227,6 +227,9 @@ typedef struct nfs_request {
 	nfs_res_t *res_nfs;
 	const nfs_function_desc_t *funcdesc;
 	void *proc_data;
+#ifdef USE_MINITRACE
+	mtr_span root_span;
+#endif  /* USE_MINITRACE */
 	/** This request may be queued up pending completion of the request
 	 *  this is a dupreq of.
 	 */

@@ -82,6 +82,9 @@ typedef enum io_direction__ {
 
 static enum nfs_req_result nfs4_complete_read(struct nfs4_read_data *data)
 {
+#ifdef USE_MINITRACE
+		mtr_loc_span ls = mtr_create_loc_span_enter("nfs4_complete_read");
+#endif
 	struct fsal_io_arg *read_arg = &data->read_arg;
 
 	if (data->res_READ4->status == NFS4_OK) {
@@ -146,6 +149,9 @@ static enum nfs_req_result nfs4_complete_read(struct nfs4_read_data *data)
 	if (read_arg->state)
 		dec_state_t_ref(read_arg->state);
 
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_span(ls);
+#endif
 	return nfsstat4_to_nfs_req_result(data->res_READ4->status);
 }
 
@@ -733,6 +739,9 @@ static enum nfs_req_result nfs4_read(struct nfs_argop4 *op,
 				&owner->so_owner.so_nfs4_owner.so_clientid;
 		}
 	}
+#ifdef USE_MINITRACE
+	mtr_loc_span ls = mtr_create_loc_span_enter("obj_ops->read2");
+#endif
 
 	/* Set up args, allocate from heap, iov_len will be 1 */
 	read_data = gsh_calloc(1, sizeof(*read_data) + sizeof(struct iovec));
@@ -765,9 +774,6 @@ static enum nfs_req_result nfs4_read(struct nfs_argop4 *op,
 again:
 
 	/* Do the actual read */
-#ifdef USE_MINITRACE
-	mtr_loc_span ls = mtr_create_loc_span_enter("obj_ops->read2");
-#endif
 	obj->obj_ops->read2(obj, bypass, nfs4_read_cb, read_arg, read_data);
 #ifdef USE_MINITRACE
 	mtr_destroy_loc_span(ls);
@@ -851,13 +857,7 @@ enum nfs_req_result nfs4_op_read(struct nfs_argop4 *op, compound_data_t *data,
 	 */
 	if (rc != NFS_REQ_ASYNC_WAIT && data->op_data != NULL) {
 		/* Go ahead and complete the read. */
-#ifdef USE_MINITRACE
-		mtr_loc_span ls = mtr_create_loc_span_enter("nfs4_complete_read");
-#endif
 		rc = nfs4_complete_read(data->op_data);
-#ifdef USE_MINITRACE
-		mtr_destroy_loc_span(ls);
-#endif
 	}
 
 	if (rc != NFS_REQ_ASYNC_WAIT && data->op_data != NULL) {

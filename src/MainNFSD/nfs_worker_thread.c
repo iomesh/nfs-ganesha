@@ -909,9 +909,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 {
 #ifdef USE_MINITRACE
 	minitrace_init();
-	mtr_span_ctx span_ctx = mtr_create_rand_span_ctx();
-	mtr_span root_span = mtr_create_root_span_with_prob("nfs_rpc_process_request", span_ctx, 0.01);
-	mtr_loc_par_guar local_parent_guard = mtr_set_loc_par_to_span(&root_span);
+	mtr_loc_par_guar local_parent_guard = mtr_set_loc_par_to_span(&reqdata->root_span);
 #endif
 	const char *client_ip = "<unknown client>";
 	const char *progname = "unknown";
@@ -952,7 +950,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 
 #ifdef USE_MINITRACE
 		mtr_destroy_loc_par_guar(local_parent_guard);
-		mtr_destroy_span(root_span);
 #endif
 		return svcerr_auth(&reqdata->svc, AUTH_FAILED);
 	}
@@ -985,7 +982,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			auth_stat2str(auth_rc));
 #ifdef USE_MINITRACE
 		mtr_destroy_loc_par_guar(local_parent_guard);
-		mtr_destroy_span(root_span);
 #endif
 		return svcerr_auth(&reqdata->svc, auth_rc);
 #ifdef _HAVE_GSSAPI
@@ -1003,7 +999,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 		{
 #ifdef USE_MINITRACE
 			mtr_destroy_loc_par_guar(local_parent_guard);
-			mtr_destroy_span(root_span);
 #endif
 			return SVC_STAT(xprt);
 		}
@@ -1019,7 +1014,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			{
 #ifdef USE_MINITRACE
 				mtr_destroy_loc_par_guar(local_parent_guard);
-				mtr_destroy_span(root_span);
 #endif
 				return svcerr_auth(&reqdata->svc,
 						   RPCSEC_GSS_CREDPROBLEM);
@@ -1027,7 +1021,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 		}
 #ifdef USE_MINITRACE
 		mtr_destroy_loc_par_guar(local_parent_guard);
-		mtr_destroy_span(root_span);
 #endif
 		return SVC_STAT(xprt);
 #endif
@@ -1066,7 +1059,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 		}
 #ifdef USE_MINITRACE
 		mtr_destroy_loc_par_guar(local_parent_guard);
-		mtr_destroy_span(root_span);
 #endif
 		return svcerr_decode(&reqdata->svc);
 	}
@@ -1154,7 +1146,6 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			suspend_op_context();
 #ifdef USE_MINITRACE
 			mtr_destroy_loc_par_guar(local_parent_guard);
-			mtr_destroy_span(root_span);
 #endif
 			return XPRT_SUSPEND;
 
@@ -1578,7 +1569,6 @@ retry_after_drc_suspend:
 			suspend_op_context();
 #ifdef USE_MINITRACE
 			mtr_destroy_loc_par_guar(local_parent_guard);
-			mtr_destroy_span(root_span);
 #endif
 			return XPRT_SUSPEND;
 		}
@@ -1604,7 +1594,6 @@ retry_after_drc_suspend:
 	op_ctx = NULL;
 #ifdef USE_MINITRACE
 	mtr_destroy_loc_par_guar(local_parent_guard);
-	mtr_destroy_span(root_span);
 	// mtr_flush();
 #endif
 	return SVC_STAT(xprt);

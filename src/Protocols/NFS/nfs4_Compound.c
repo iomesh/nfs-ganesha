@@ -673,6 +673,9 @@ static inline void copy_tag(utf8str_cs *dest, utf8str_cs *src)
 enum nfs_req_result complete_op(compound_data_t *data, nfsstat4 *status,
 				enum nfs_req_result result)
 {
+#ifdef USE_MINITRACE
+	mtr_loc_span op_complete_span = mtr_create_loc_span_enter("complete_op");
+#endif
 	nfs_resop4 *thisres = &data->resarray[data->oppos];
 	COMPOUND4res *res_compound4;
 
@@ -743,6 +746,9 @@ enum nfs_req_result complete_op(compound_data_t *data, nfsstat4 *status,
 out:
 
 	server_stats_nfsv4_op_done(data->opcode, &data->op_start_time, *status);
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_span(op_complete_span);
+#endif
 
 	return result;
 }
@@ -931,13 +937,7 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 		/* Complete the operation, otherwise return without doing
 		 * anything else.
 		 */
-#ifdef USE_MINITRACE
-	mtr_loc_span op_complete_span = mtr_create_loc_span_enter("complete_op");
-#endif
 		result = complete_op(data, status, result);
-#ifdef USE_MINITRACE
-	mtr_destroy_loc_span(op_complete_span);
-#endif
 	}
 
 #ifdef USE_MINITRACE
@@ -1097,6 +1097,10 @@ static enum xprt_stat nfs4_compound_resume(struct svc_req *req)
 	compound_data_t *data = reqdata->proc_data;
 	enum nfs_req_result result;
 
+#ifdef USE_MINITRACE
+	mtr_loc_par_guar local_parent_guard = mtr_set_loc_par_to_span(&reqdata->root_span);
+#endif
+
 	/* Restore the op_ctx */
 	resume_op_context(&reqdata->op_context);
 
@@ -1115,6 +1119,9 @@ static enum xprt_stat nfs4_compound_resume(struct svc_req *req)
 		 * ops on this request at all.
 		 */
 		suspend_op_context();
+#ifdef USE_MINITRACE
+		mtr_destroy_loc_par_guar(local_parent_guard);
+#endif
 		return XPRT_SUSPEND;
 	}
 
@@ -1132,6 +1139,9 @@ static enum xprt_stat nfs4_compound_resume(struct svc_req *req)
 			 * ops on this request at all.
 			 */
 			suspend_op_context();
+#ifdef USE_MINITRACE
+			mtr_destroy_loc_par_guar(local_parent_guard);
+#endif
 			return XPRT_SUSPEND;
 		}
 	}
@@ -1145,6 +1155,9 @@ static enum xprt_stat nfs4_compound_resume(struct svc_req *req)
 
 	nfs_rpc_complete_async_request(reqdata, NFS_REQ_OK);
 
+#ifdef USE_MINITRACE
+	mtr_destroy_loc_par_guar(local_parent_guard);
+#endif
 	return XPRT_IDLE;
 }
 
