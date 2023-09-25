@@ -77,6 +77,10 @@
 #include "monitoring.h"
 #endif /* USE_MONITORING */
 
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif /* USE_MINITRACE */
+
 #define NFS_options nfs_param.core_param.core_options
 #define NFS_program nfs_param.core_param.program
 
