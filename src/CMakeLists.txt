@@ -315,7 +315,6 @@ if(USE_MINITRACE)
   find_package(minitrace_c 0.5.1 CONFIG REQUIRED)
   set(MINITRACE_LIBRARIES
     minitrace_c
-    minitrace_rust
   )
 endif(USE_MINITRACE)
 
