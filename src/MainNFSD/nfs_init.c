@@ -78,6 +78,9 @@
 #include <urcu-bp.h>
 #include "conf_url.h"
 #include "FSAL/fsal_localfs.h"
+#ifdef USE_MINITRACE
+#include "minitrace.h"
+#endif
 
 pthread_mutexattr_t default_mutex_attr;
 pthread_rwlockattr_t default_rwlock_attr;
@@ -183,6 +186,11 @@ void reread_config(void)
 		(void) report_config_errors(&err_type, NULL, config_errs_to_log);
 		return;
 	}
+
+#ifdef USE_MINITRACE
+	/* Update the minitrace configuration */
+	read_minitrace_config(config_struct, &err_type);
+#endif
 
 	/* Update the logging configuration */
 	status = read_log_config(config_struct, &err_type);

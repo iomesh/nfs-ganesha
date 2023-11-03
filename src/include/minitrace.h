@@ -11,6 +11,11 @@
 extern "C" {
 #endif
 
+extern double minitrace_sample_ratio;
+
+int read_minitrace_config(config_file_t in_config, struct config_error_type *err_type);
+
+
 static void *minitrace_flush_loop(void *arg) {
   mtr_otlp_grpcio_cfg gcfg = mtr_create_def_otlp_grpcio_cfg();
   mtr_otlp_exp_cfg ecfg = mtr_create_def_otlp_exp_cfg();
@@ -26,29 +31,16 @@ static void *minitrace_flush_loop(void *arg) {
   return NULL;
 }
 
-static void *minitrace_gen_loop(void *arg) {
-  while (1) {
-    sleep(10);
-    mtr_span_ctx p = mtr_create_rand_span_ctx();
-    mtr_span r = mtr_create_root_span("test-span-at-minitrace-init", p);
-    mtr_loc_par_guar g = mtr_set_loc_par_to_span(&r);
-    mtr_destroy_loc_par_guar(g);
-    mtr_destroy_span(r);
-  } 
-  return NULL;
-}
 
 static inline void minitrace_init() {
 //   LogEvent(COMPONENT_INIT, "Init minitrace");
   static bool initialised;
   if (initialised)
     return;
-  fprintf(stderr, "Init minitrace");
+  fprintf(stderr, "Init minitrace\n");
 
-  pthread_t t1, t2;
+  pthread_t t1;
   pthread_create(&t1, NULL, minitrace_flush_loop, NULL);
-  pthread_create(&t2, NULL, minitrace_gen_loop, NULL);
-//   mtr_destroy_otel_rptr(rptr);
   initialised = true;
 }
 

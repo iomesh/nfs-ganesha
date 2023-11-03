@@ -217,6 +217,7 @@
   release_op_context;
   release_posix_file_system;
   read_log_config;
+  read_minitrace_config;
   report_config_errors;
   resume_op_context;
   claim_posix_filesystems;

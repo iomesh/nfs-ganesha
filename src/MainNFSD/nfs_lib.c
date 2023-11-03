@@ -195,6 +195,10 @@ int nfs_libmain(const char *ganesha_conf,
 			gsh_free(errstr);
 	}
 
+#ifdef USE_MINITRACE
+	read_minitrace_config(nfs_config_struct, &err_type);
+#endif
+
 	if (read_log_config(nfs_config_struct, &err_type) < 0) {
 		LogCrit(COMPONENT_INIT,
 			 "Error while parsing log configuration");
