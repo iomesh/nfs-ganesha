@@ -112,6 +112,7 @@ static int minitrace_conf_commit(void *node, void *link_mem, void *self_struct,
 			minitrace_sample_ratio = 0.0;
 		LogChanges("Changed minitrace_sample_ratio to %f",
 			   minitrace_sample_ratio);
+		gsh_free(conf->minitrace_sample_ratio);
 	}
 
 /*
