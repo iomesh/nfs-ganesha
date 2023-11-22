@@ -78,6 +78,7 @@
 #endif /* USE_MONITORING */
 
 #ifdef USE_MINITRACE
+#include "minitrace_init.h"
 #include "minitrace.h"
 #endif /* USE_MINITRACE */
 

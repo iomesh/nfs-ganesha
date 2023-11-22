@@ -67,6 +67,7 @@
 #endif
 
 #ifdef USE_MINITRACE
+#include "minitrace_init.h"
 #include "minitrace.h"
 #endif
 
