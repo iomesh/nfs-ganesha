@@ -64,9 +64,11 @@
 #endif
 
 #include "minitrace.h"
+#include "minitrace_init.h"
 
 double minitrace_sample_ratio = 0.0;
 char *otlp_endpoint = NULL;
+bool minitrace_reinit = false;
 
 struct minitrace_config {
 	char *otlp_endpoint;
@@ -115,16 +117,17 @@ static int minitrace_conf_commit(void *node, void *link_mem, void *self_struct,
 		gsh_free(conf->minitrace_sample_ratio);
 	}
 
-/*
 	if (conf->otlp_endpoint) {
 		if (otlp_endpoint) {
-			free(otlp_endpoint);
+			gsh_free(otlp_endpoint);
 		}
-		otlp_endpoint = strdup(conf->otlp_endpoint);
-		LogChanges("Changed otlp_endpoint to %s",
+		otlp_endpoint = conf->otlp_endpoint;
+		LogChanges("Changing otlp_endpoint to %s",
 			   otlp_endpoint);
+		// restart_minitrace();
+		minitrace_reinit = true;
+		LogChanges("Minitrace reinit");
 	}
-*/
 
 	return 0;
 }
