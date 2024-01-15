@@ -1073,6 +1073,14 @@ void nfs_init_complete(void)
 	PTHREAD_MUTEX_unlock(&nfs_init.init_mutex);
 }
 
+bool check_nfs_init_complete(void) {
+	bool complete = false;
+	PTHREAD_MUTEX_lock(&nfs_init.init_mutex);
+	complete = nfs_init.init_complete;
+	PTHREAD_MUTEX_unlock(&nfs_init.init_mutex);
+	return complete;
+}
+
 void nfs_init_wait(void)
 {
 	PTHREAD_MUTEX_lock(&nfs_init.init_mutex);
