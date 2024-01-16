@@ -183,17 +183,7 @@ static int sfs_start_grace(const char *vip, int event) {
 	gsp.event = event;
 	gsp.ipaddr = (char *)vip;
 
-	int ret;
-	do {
-		ret = nfs_start_grace(&gsp);
-		if (ret == -EAGAIN) {
-			nfs_wait_for_grace_norefs();
-		} else if (ret) {
-			break;
-		}
-	} while (ret);
-
-	return -ret;
+	return -nfs_start_grace(&gsp);
 }
 
 static void write_log(const char *file, int level, uint32_t line, const char *target, const char *message)
