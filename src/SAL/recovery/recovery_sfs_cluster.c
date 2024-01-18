@@ -180,7 +180,7 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 static int sfs_start_grace(const char *vip, int event) {
     if (!check_nfs_init_complete()) {
 		LogWarn(COMPONENT_RECOVERY_BACKEND, "nfs server has not been initialized completely.");
-		return -EAGAIN;
+		return EAGAIN;
 	}
 
 	assert(event == EVENT_RELEASE_IP || event == EVENT_TAKE_IP);
