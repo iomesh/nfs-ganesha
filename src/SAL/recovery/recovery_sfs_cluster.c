@@ -6,6 +6,7 @@
 #include "bsd-base64.h"
 #include "recovery_sfs.h"
 #include <ctype.h>
+#include "nfs_init.h"
 
 #include "sfs_recovery_backend.h"
 #include "sfs_client.h"
@@ -177,6 +178,11 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 }
 
 static int sfs_start_grace(const char *vip, int event) {
+    if (!check_nfs_init_complete()) {
+		LogWarn(COMPONENT_RECOVERY_BACKEND, "nfs server has not been initialized completely.");
+		return -EAGAIN;
+	}
+
 	assert(event == EVENT_RELEASE_IP || event == EVENT_TAKE_IP);
 
 	nfs_grace_start_t gsp;
