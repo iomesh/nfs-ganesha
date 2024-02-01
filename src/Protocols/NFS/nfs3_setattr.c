@@ -181,7 +181,7 @@ int nfs3_setattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 
 	if (rc != NFS_REQ_DROP) {
 		/* Build Weak Cache Coherency data */
-		nfs_SetWccData(&pre_attr, obj, &resok->obj_wcc);
+		nfs_SetWccData(&pre_attr, obj, NULL, &resok->obj_wcc);
 	}
 
 	/* Release the attributes (may release an inherited ACL) */
