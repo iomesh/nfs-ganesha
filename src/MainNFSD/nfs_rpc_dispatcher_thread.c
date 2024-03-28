@@ -113,6 +113,37 @@ static enum xprt_stat nfs_rpc_free_user_data(SVCXPRT *);
 static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs);
 static void free_nfs_request(struct svc_req *req, enum xprt_stat stat);
 
+/**
+ * There is no throttling in nfs-ganesha now. When there are very many
+ * inflight requests, especially a lot of async read/write requests,
+ * too much memory will be occupied and OOM may happen.
+ *
+ * We add a simple and effective throttling mechanism here. It limits
+ * the maximum number of inflight requests. The thread will blocks for
+ * this limit so that no more memory is allocated. And the blocked
+ * thread will unblock after other requests finish.
+ *
+ * Refer to : https://github.com/nfs-ganesha/nfs-ganesha/issues/1099
+ */
+struct rpc_concurrency_control {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+
+	// including inflight reqs that are received, excluding reqs that
+	// are sent as NFS v4.x callback procedures.
+	int32_t inflight_reqs_count;
+};
+
+// `cc` denotes concurency control.
+static struct rpc_concurrency_control rpc_cc;
+
+static void nfs_init_rpc_cc(void)
+{
+	PTHREAD_MUTEX_init(&rpc_cc.mutex, NULL);
+	PTHREAD_COND_init(&rpc_cc.cond, NULL);
+	rpc_cc.inflight_reqs_count = 0;
+}
+
 const char *xprt_stat_s[XPRT_DESTROYED + 1] = {
 	"XPRT_IDLE",
 	"XPRT_DISPATCH",
@@ -1343,6 +1374,8 @@ void nfs_Init_svc(void)
 	rdma = NFS_options & CORE_OPTION_NFS_RDMA;
 #endif
 
+	nfs_init_rpc_cc();
+
 	/* New TI-RPC package init function */
 	svc_params.disconnect_cb = NULL;
 	svc_params.alloc_cb = alloc_nfs_request;
@@ -1535,6 +1568,17 @@ static enum xprt_stat nfs_rpc_free_user_data(SVCXPRT *xprt)
  */
 static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs)
 {
+	// Check reqs concurrecy at first
+	int32_t max_count = nfs_param.core_param.max_inflight_request_count;
+	PTHREAD_MUTEX_lock(&rpc_cc.mutex);
+	while (rpc_cc.inflight_reqs_count >= max_count) {
+		LogDebug(COMPONENT_DISPATCH,
+			"inflight_request_count reaches limit %d, will block", max_count);
+		pthread_cond_wait(&rpc_cc.cond, &rpc_cc.mutex);
+	}
+	rpc_cc.inflight_reqs_count ++;
+	PTHREAD_MUTEX_unlock(&rpc_cc.mutex);
+
 	nfs_request_t *reqdata = gsh_calloc(1, sizeof(nfs_request_t));
 
 	if (!xprt) {
@@ -1579,6 +1623,13 @@ static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs)
 
 static void free_nfs_request(struct svc_req *req, enum xprt_stat stat)
 {
+	// Update reqs concurency at first
+	PTHREAD_MUTEX_lock(&rpc_cc.mutex);
+	rpc_cc.inflight_reqs_count --;
+	assert(rpc_cc.inflight_reqs_count >= 0);
+	pthread_cond_signal(&rpc_cc.cond);
+	PTHREAD_MUTEX_unlock(&rpc_cc.mutex);
+
 	nfs_request_t *reqdata = container_of(req, nfs_request_t, svc);
 	SVCXPRT *xprt = reqdata->svc.rq_xprt;
 

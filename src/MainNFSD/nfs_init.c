@@ -154,6 +154,7 @@ char *cid_server_scope;
  * LOG { FORMAT {} }
  * EXPORT {}
  * EXPORT { CLIENT {} }
+ * MINITRACE {}
  *
  */
 
@@ -394,6 +395,19 @@ static inline void core_pkginit(void)
 	glist_init(&nfs_param.core_param.haproxy_hosts);
 }
 
+static inline void log_params_on_init() {
+	LogDebug(COMPONENT_INIT,
+		"core_param.max_inflight_request_count %d",
+		nfs_param.core_param.max_inflight_request_count);
+	LogDebug(COMPONENT_INIT,
+		"core_param.rpc.ioq_thrd_max %u",
+		nfs_param.core_param.rpc.ioq_thrd_max);
+	LogDebug(COMPONENT_INIT,
+		"core_param.rpc.max_connections %u",
+		nfs_param.core_param.rpc.max_connections);
+	// log more items here.
+}
+
 /**
  * @brief Load parameters from config file
  *
@@ -491,6 +505,8 @@ int nfs_set_param_from_conf(config_file_t parse_tree,
 		LogEvent(COMPONENT_INIT, "Couldn't setup rados_urls");
 		return -1;
 	}
+
+	log_params_on_init();
 
 	LogEvent(COMPONENT_INIT, "Configuration file successfully parsed");
 

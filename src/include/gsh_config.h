@@ -482,6 +482,11 @@ typedef struct nfs_core_param {
 	/** if  Manage_Gids=True and group resolution fails,
 	 *  then use gid data from rpc request */
 	bool enable_rpc_cred_fallback;
+	/**
+	 * if inflight requests reach this limit, new requests will not
+	 * be allocated and handled. Range 1-8192, default 256.
+	 */
+	int32_t max_inflight_request_count;
 } nfs_core_parameter_t;
 
 /** @} */
