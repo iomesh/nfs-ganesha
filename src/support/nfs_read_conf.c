@@ -331,8 +331,6 @@ static struct config_item core_params[] = {
 #endif
 	CONF_ITEM_BOOL("enable_rpc_cred_fallback", false,
 		       nfs_core_param, enable_rpc_cred_fallback),
-	CONF_ITEM_I32("Max_Inflight_Request_Count", 1, 8192, 256,
-			   nfs_core_param, max_inflight_request_count),
 	CONFIG_EOL
 };
 
