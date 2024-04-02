@@ -83,6 +83,13 @@ enum nfs_req_result nfs4_op_reclaim_complete(struct nfs_argop4 *op,
 
 	res_RECLAIM_COMPLETE4->rcr_status = NFS4_OK;
 
+	LogDebug(COMPONENT_CLIENTID,
+		 "clientid: %lu cid_recov_tag: [%s] cur_complete: %d allow_reclaim: %d",
+		 clientid->cid_clientid,
+		 clientid->cid_recov_tag,
+		 clientid->cid_cb.v41.cid_reclaim_complete,
+		 clientid->cid_allow_reclaim);
+
 	/* For now, we don't handle rca_one_fs, so we won't complain about
 	 * complete already for it.
 	 */

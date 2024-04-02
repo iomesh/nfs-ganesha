@@ -1190,8 +1190,7 @@ struct state_async_queue_t {
 #define EVENT_JUST_GRACE     0	/* Just start grace period */
 #define EVENT_CLEAR_BLOCKED  1	/* Start grace period, and clear blocked locks
 				 */
-#define EVENT_RELEASE_IP     2	/* Start grace period, clear blocked locks,
-				   and release all locks */
+#define EVENT_RELEASE_IP     2	/* Release client_id records without grace */
 #define EVENT_UPDATE_CLIENTS 3	/* Start grace period, clear blocked locks,
 				   release all locks, and update clients list.
 				 */
