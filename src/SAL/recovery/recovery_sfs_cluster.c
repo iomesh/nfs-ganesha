@@ -186,6 +186,7 @@ static int sfs_start_grace(const char *vip, int event) {
 	assert(event == EVENT_RELEASE_IP || event == EVENT_TAKE_IP);
 
 	nfs_grace_start_t gsp;
+	gsp.nodeid = 0;  // Unused field
 	gsp.event = event;
 	gsp.ipaddr = (char *)vip;
 
@@ -275,6 +276,7 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 
 static void sfs_cluster_rm_clid(nfs_client_id_t *clientid)
 {
+	LogDebug(COMPONENT_CLIENTID, "cid_clientid: [%ld] cid_recov_tag: [%s]", clientid->cid_clientid, clientid->cid_recov_tag);
 	// rust will panic if rm clid failed
 	sfs_recovery_rm_clid(clientid->cid_clientid, clientid->cid_server_addr);
 

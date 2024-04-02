@@ -245,6 +245,24 @@ int nfs_start_grace(nfs_grace_start_t *gsp)
 	bool was_grace;
 	uint32_t cur, old, pro;
 
+	/**
+	 * EVENT_RELEASE_IP means the server ip goes away and established
+	 * NFS v4.x clients with this ip will NOT send requests into this
+	 * nfs-ganesha anymore.
+	 *
+	 * We just need release related client records and do NOT enter
+	 * into grace period because no client will come here to reclaim.
+	 *
+	 * We reuse this function in ease of implementation currently :)
+	 */
+	if (gsp && gsp->event == EVENT_RELEASE_IP) {
+		LogEvent(COMPONENT_STATE,
+			 "NFS Server recovery event EVENT_RELEASE_IP nodeid %d ip %s",
+			 gsp->nodeid, gsp->ipaddr);
+		nfs_release_v4_clients(gsp->ipaddr);
+		return ret;
+	}
+
 	PTHREAD_MUTEX_lock(&grace_mutex);
 
 	if (nfs_param.nfsv4_param.graceless) {
@@ -357,7 +375,8 @@ int nfs_start_grace(nfs_grace_start_t *gsp)
 			nfs_release_nlm_state(gsp->ipaddr);
 			if (gsp->event == EVENT_RELEASE_IP) {
 				PTHREAD_MUTEX_unlock(&grace_mutex);
-				nfs_release_v4_clients(gsp->ipaddr);
+				LogFatal(COMPONENT_STATE,
+					 "EVENT_RELEASE_IP should have been handled before");
 				return ret;
 			} else {
 				/*
