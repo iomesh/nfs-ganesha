@@ -177,6 +177,11 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 	return val;
 }
 
+static int get_ganesha_status() {
+	// 0 denotes Initializing; 1 denotes Running.
+	return check_nfs_init_complete();
+}
+
 static int sfs_start_grace(const char *vip, int event) {
     if (!check_nfs_init_complete()) {
 		LogWarn(COMPONENT_RECOVERY_BACKEND, "nfs server has not been initialized completely.");
@@ -209,7 +214,11 @@ static int sfs_cluster_recovery_init(void)
 	sessionid = sfs_cluster_param.sessionid;
 
 	sfs_recovery_log_init(write_log);
-	int ret = sfs_recovery_backend_init(sessionid, sfs_start_grace);
+
+	struct NFSServerCallbacks nfs_cbs;
+	nfs_cbs.start_grace_cb = sfs_start_grace;
+	nfs_cbs.get_status_cb = get_ganesha_status;
+	int ret = sfs_recovery_backend_init(sessionid, nfs_cbs);
 
 	LogEvent(COMPONENT_INIT,
 		 "creating sfs_cluster recovery database, sessionid: %d", sessionid);
@@ -220,6 +229,7 @@ static int sfs_cluster_recovery_init(void)
 /* Try to delete old recovery db */
 static void sfs_cluster_end_grace(void)
 {
+	LogEvent(COMPONENT_STATE, "notify sfs_recovery_backend to end grace");
 	// rust will panic if end grace failed
 	sfs_recovery_end_grace();
 }
