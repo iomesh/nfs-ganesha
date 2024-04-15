@@ -613,7 +613,8 @@ state_status_t state_unlock(struct fsal_obj_handle *obj,
 			    state_owner_t *owner,
 			    bool state_applies,
 			    int32_t nsm_state,
-			    fsal_lock_param_t *lock);
+			    fsal_lock_param_t *lock,
+				bool fsal_unlock);
 
 state_status_t state_cancel(struct fsal_obj_handle *obj,
 			    state_owner_t *owner, fsal_lock_param_t *lock);
@@ -622,7 +623,7 @@ state_status_t state_nlm_notify(state_nsm_client_t *nsmclient,
 				bool state_applies,
 				int32_t state);
 
-void state_nfs4_owner_unlock_all(state_owner_t *owner);
+void state_nfs4_owner_unlock_all(state_owner_t *owner, bool fsal_unlock);
 
 void state_export_unlock_all(void);
 

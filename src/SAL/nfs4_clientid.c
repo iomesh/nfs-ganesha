@@ -869,6 +869,9 @@ bool clientid_has_state(nfs_client_id_t *clientid)
  *
  * @param[in] clientid The client id to expire
  * @param[in] make_stale  Set if client id expire is due to ip move.
+ *           If it is true, we keep the client id in hashtable and
+ *           don't release lock state from FSAL so that NFS client
+ *           can reclaim lock from our FSAL again successfully.
  *
  * @return true if the clientid is successfully expired.
  */
@@ -992,7 +995,7 @@ bool nfs_client_id_expire(nfs_client_id_t *clientid, bool make_stale)
 			continue;
 		}
 
-		state_nfs4_owner_unlock_all(owner);
+		state_nfs4_owner_unlock_all(owner, !make_stale);
 
 		if (isFullDebug(COMPONENT_CLIENTID)) {
 			char str[LOG_BUFF_LEN] = "\0";

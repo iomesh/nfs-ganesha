@@ -99,7 +99,7 @@ int nlm4_Unlock(nfs_arg_t *args, struct svc_req *req, nfs_res_t *res)
 
 	if (state != NULL)
 		state_status =
-		  state_unlock(obj, state, nlm_owner, false, 0, &lock);
+		  state_unlock(obj, state, nlm_owner, false, 0, &lock, true);
 
 	if (state_status != STATE_SUCCESS) {
 		/* Unlock could fail in the FSAL and make a bit of a mess,

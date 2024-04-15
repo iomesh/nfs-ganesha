@@ -2789,7 +2789,8 @@ state_status_t state_unlock(struct fsal_obj_handle *obj,
 			    state_owner_t *owner,
 			    bool state_applies,
 			    int32_t nsm_state,
-			    fsal_lock_param_t *lock)
+			    fsal_lock_param_t *lock,
+				bool fsal_unlock)
 {
 	bool empty = false;
 	bool removed = false;
@@ -2841,22 +2842,27 @@ state_status_t state_unlock(struct fsal_obj_handle *obj,
 		goto out_unlock;
 	}
 
-	/* Unlocking the entire region will remove any FSAL locks we held,
-	 * whether from fully granted locks, or from blocking locks that were
-	 * in the process of being granted.
-	 */
-	status = do_lock_op(obj,
-			    state,
-			    FSAL_OP_UNLOCK,
-			    owner,
-			    lock,
-			    NULL, /* no conflict expected */
-			    NULL,
-			    false);
+	if (fsal_unlock) {
+		/* Unlocking the entire region will remove any FSAL locks we held,
+		* whether from fully granted locks, or from blocking locks that were
+		* in the process of being granted.
+		*/
+		status = do_lock_op(obj,
+					state,
+					FSAL_OP_UNLOCK,
+					owner,
+					lock,
+					NULL, /* no conflict expected */
+					NULL,
+					false);
 
-	if (status != STATE_SUCCESS)
-		LogMajor(COMPONENT_STATE, "Unable to unlock FSAL, error=%s",
-			 state_err_str(status));
+		if (status != STATE_SUCCESS)
+			LogMajor(COMPONENT_STATE, "Unable to unlock FSAL, error=%s",
+				state_err_str(status));
+	} else {
+		// Keep lock in FSAL so that NFS client can reclaim from that FSAL.
+		LogDebug(COMPONENT_STATE, "skip to unlock from FSAL");
+	}
 
 	LogFullDebug(COMPONENT_STATE,
 		     "----------------------------------------------------------------------");
@@ -3089,7 +3095,7 @@ state_status_t state_nlm_notify(state_nsm_client_t *nsmclient,
 			 * the file.
 			 */
 			status = state_unlock(obj, state, owner, state_applies,
-					      nsm_state, &lock);
+					      nsm_state, &lock, true);
 		} else {
 			/* The export is being removed, we didn't bother
 			 * calling state_unlock() because export cleanup
@@ -3248,7 +3254,7 @@ state_status_t state_nlm_notify(state_nsm_client_t *nsmclient,
  * @param[in] owner Lock owner
  *
  */
-void state_nfs4_owner_unlock_all(state_owner_t *owner)
+void state_nfs4_owner_unlock_all(state_owner_t *owner, bool fsal_unlock)
 {
 	fsal_lock_param_t lock;
 	struct fsal_obj_handle *obj;
@@ -3309,7 +3315,7 @@ void state_nfs4_owner_unlock_all(state_owner_t *owner)
 		lock.lock_length = 0;
 
 		/* Remove all locks held by this owner on the file */
-		status = state_unlock(obj, state, owner, false, 0, &lock);
+		status = state_unlock(obj, state, owner, false, 0, &lock, fsal_unlock);
 
 		if (!state_unlock_err_ok(status)) {
 			/* Increment the error count and try the next lock,
@@ -3416,7 +3422,7 @@ void state_export_unlock_all(void)
 		/* Remove all locks held by this NLM Client on
 		 * the file.
 		 */
-		status = state_unlock(obj, state, owner, false, 0, &lock);
+		status = state_unlock(obj, state, owner, false, 0, &lock, true);
 
 		/* call state_del regardless of status as we're killing
 		 * the export

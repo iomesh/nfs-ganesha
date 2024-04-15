@@ -208,7 +208,8 @@ enum nfs_req_result nfs4_op_locku(struct nfs_argop4 *op, compound_data_t *data,
 				    lock_owner,
 				    false,
 				    0,
-				    &lock_desc);
+				    &lock_desc,
+					true);
 
 	if (state_status != STATE_SUCCESS) {
 		res_LOCKU4->status = nfs4_Errno_state(state_status);
