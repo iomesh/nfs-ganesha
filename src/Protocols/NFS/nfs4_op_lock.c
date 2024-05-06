@@ -111,7 +111,13 @@ enum nfs_req_result nfs4_op_lock(struct nfs_argop4 *op,
 	bool new_lock_state = false;
 
 	LogDebug(COMPONENT_NFS_V4_LOCK,
-		 "Entering NFS v4 LOCK handler ----------------------");
+		"Entering NFS v4 LOCK handler ----------------------");
+
+	LogDebug(COMPONENT_NFS_V4_LOCK,
+		"sleep 55s... ----------------------");
+	sleep(55);
+	LogDebug(COMPONENT_NFS_V4_LOCK,
+		 "end sleep ----------------------");
 
 	/* Initialize to sane starting values */
 	resp->resop = NFS4_OP_LOCK;
