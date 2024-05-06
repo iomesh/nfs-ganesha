@@ -2257,6 +2257,10 @@ state_status_t do_lock_op(struct fsal_obj_handle *obj,
 	if (nfs4_clientid != NULL) {
 		lock->clid = nfs4_clientid->cid_clientid;
 		lock->saddr = nfs4_clientid->cid_server_addr;
+		lock->co_ownerid.co_ownerid_len =
+			nfs4_clientid->cid_client_record->cr_client_val_len;
+		lock->co_ownerid.co_ownerid_val =
+			nfs4_clientid->cid_client_record->cr_client_val;
 	}
 	/* Perform this lock operation using the support_ex lock op. */
 	fsal_status = obj->obj_ops->lock_op2(obj, state, owner,
