@@ -917,6 +917,10 @@ typedef struct fsal_lock_param_t {
 	/* clid and saddr are used to validate corresponding lock */
 	uint64_t clid; // client id
 	uint32_t saddr; // server address
+	struct {
+		u_int co_ownerid_len;
+		char *co_ownerid_val;
+	} co_ownerid;
 } fsal_lock_param_t;
 
 typedef struct fsal_share_param_t {
