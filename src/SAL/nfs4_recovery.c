@@ -118,12 +118,15 @@ static void nfs_release_v4_clients(char *ip);
 
 
 
-clid_entry_t *nfs4_add_clid_entry(char *cl_name)
+clid_entry_t *nfs4_add_clid_entry(char *cl_name,
+					bool reclaim_complete, bool end_grace)
 {
 	clid_entry_t *new_ent = gsh_malloc(sizeof(clid_entry_t));
 
 	glist_init(&new_ent->cl_rfh_list);
 	(void) strlcpy(new_ent->cl_name, cl_name, sizeof(new_ent->cl_name));
+	new_ent->cl_reclaim_complete = reclaim_complete;
+	new_ent->end_grace = end_grace;
 	glist_add(&clid_list, &new_ent->cl_list);
 	++clid_count;
 	return new_ent;
@@ -662,14 +665,26 @@ static bool check_clid(nfs_client_id_t *clientid, clid_entry_t *clid_ent)
 {
 	bool ret = false;
 
+	LogDebug(COMPONENT_CLIENTID,
+		"compare %s to: %s reclaim complete %d end_grace %d",
+		clientid->cid_recov_tag, clid_ent->cl_name,
+		clid_ent->cl_reclaim_complete,
+		clid_ent->end_grace);
 
-	LogDebug(COMPONENT_CLIENTID, "compare %s to %s",
-		 clientid->cid_recov_tag, clid_ent->cl_name);
-
+	/**
+	 * Don't allow reclaim if the clid_ent didn't reclaim completely
+	 * after being confirmed to reject questionable reclaim in some
+	 * edge conditions. See RFC 8881 Section 8.4.3 for details.
+	*/
 	if (clientid->cid_recov_tag &&
 	    !strncmp(clientid->cid_recov_tag,
-		     clid_ent->cl_name, PATH_MAX))
-		ret = true;
+		     clid_ent->cl_name, PATH_MAX)) {
+		if (clientid->cid_minorversion > 0)
+			ret = !clid_ent->end_grace ||
+					clid_ent->cl_reclaim_complete;
+		else
+			ret = true;
+	}
 
 	return ret;
 }
@@ -728,6 +743,15 @@ void  nfs4_chk_clid(nfs_client_id_t *clientid)
 	PTHREAD_MUTEX_lock(&grace_mutex);
 	nfs4_chk_clid_impl(clientid, &dummy_clid_ent);
 	PTHREAD_MUTEX_unlock(&grace_mutex);
+}
+
+void nfs41_reclaim_complete_clid(nfs_client_id_t *clientid)
+{
+	PTHREAD_MUTEX_lock(&clientid->cid_mutex);
+	if (recovery_backend->reclaim_complete) {
+		recovery_backend->reclaim_complete(clientid);
+	}
+	PTHREAD_MUTEX_unlock(&clientid->cid_mutex);
 }
 
 /**

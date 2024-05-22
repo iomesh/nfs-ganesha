@@ -248,7 +248,7 @@ static void sfs_cluster_read_clids(nfs_grace_start_t *gsp,
 	while ((recov_tag = sfs_recovery_pop_clid_entry()) != NULL) {
 		clid_entry_t* clid_entry;
 
-		clid_entry = add_clid_entry((char *)recov_tag);
+		clid_entry = add_clid_entry((char *)recov_tag, false, true);
 
 		if (clid_entry != NULL) {
 			const char* rfh = NULL;

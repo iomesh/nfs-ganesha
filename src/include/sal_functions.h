@@ -925,6 +925,7 @@ void nfs_notify_grace_norefs_waiters(void);
 void nfs4_add_clid(nfs_client_id_t *);
 void nfs4_rm_clid(nfs_client_id_t *);
 void nfs4_chk_clid(nfs_client_id_t *);
+void nfs41_reclaim_complete_clid(nfs_client_id_t *);
 
 /* Delegation revocation tracking */
 bool nfs4_check_deleg_reclaim(nfs_client_id_t *, nfs_fh4 *);
@@ -959,7 +960,7 @@ static inline bool obj_is_junction(struct fsal_obj_handle *obj)
 	return res;
 }
 
-typedef clid_entry_t * (*add_clid_entry_hook)(char *);
+typedef clid_entry_t * (*add_clid_entry_hook)(char *, bool, bool);
 typedef rdel_fh_t * (*add_rfh_entry_hook)(clid_entry_t *, char *);
 
 struct nfs4_recovery_backend {
@@ -970,6 +971,7 @@ struct nfs4_recovery_backend {
 				    add_rfh_entry_hook add_rfh);
 	void (*add_clid)(nfs_client_id_t *);
 	void (*rm_clid)(nfs_client_id_t *);
+	void (*reclaim_complete)(nfs_client_id_t *);
 	void (*add_revoke_fh)(nfs_client_id_t *, nfs_fh4 *);
 	void (*end_grace)(void);
 	void (*maybe_start_grace)(void);
