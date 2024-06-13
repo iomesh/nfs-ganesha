@@ -368,22 +368,24 @@ not_junction:
 	/* Adjust access mask if ACL is asked for.
 	 * NOTE: We intentionally do NOT check ACE4_READ_ATTR.
 	 */
-	if (attribute_is_set(tracker->req_attr, FATTR4_ACL))
+	if (attribute_is_set(tracker->req_attr, FATTR4_ACL)){
+
 		access_mask_attr |= FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_READ_ACL);
 
-	/* Attrs were refreshed before call */
-	fsal_status = obj->obj_ops->test_access(obj, access_mask_attr, NULL,
-					       NULL, false);
-	if (FSAL_IS_ERROR(fsal_status)) {
-		LogDebug(COMPONENT_NFS_READDIR,
-			 "permission check for attributes status=%s",
-			 msg_fsal_err(fsal_status.major));
+		/* Attrs were refreshed before call */
+		fsal_status = obj->obj_ops->test_access(obj, access_mask_attr, NULL,
+						       NULL, false);
+		if (FSAL_IS_ERROR(fsal_status)) {
+			LogDebug(COMPONENT_NFS_READDIR,
+				 "permission check for attributes status=%s",
+				 msg_fsal_err(fsal_status.major));
 
-		args.rdattr_error = nfs4_Errno_status(fsal_status);
-		LogDebug(COMPONENT_NFS_READDIR,
-			 "Skipping because of %s",
-			 nfsstat4_to_str(args.rdattr_error));
-		goto skip;
+			args.rdattr_error = nfs4_Errno_status(fsal_status);
+			LogDebug(COMPONENT_NFS_READDIR,
+				 "Skipping because of %s",
+				 nfsstat4_to_str(args.rdattr_error));
+			goto skip;
+		}
 	}
 
 	/* Tell is_referral to not cache attrs as it will affect readdir
