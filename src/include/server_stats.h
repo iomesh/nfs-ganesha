@@ -51,7 +51,7 @@ void server_stats_9p_done(u8 msgtype, struct _9p_request_data *req9p);
 void server_stats_io_done(size_t requested,
 			  size_t transferred, bool success, bool is_write);
 void server_stats_compound_done(int num_ops, int status);
-void server_stats_nfsv4_op_done(int proto_op,
+void server_stats_nfsv4_op_done(compound_data_t *data,
 				struct timespec *start_time, int status);
 void server_stats_transport_done(struct gsh_client *client,
 				uint64_t rx_bytes, uint64_t rx_pkt,

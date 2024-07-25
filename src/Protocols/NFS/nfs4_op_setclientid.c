@@ -82,7 +82,7 @@ enum nfs_req_result nfs4_op_setclientid(struct nfs_argop4 *op,
 	nfs_client_id_t *unconf;
 	clientid4 clientid;
 	verifier4 verifier;
-	uint32_t server_addr;
+	in_addr_t server_addr;
 	int rc;
 
 	resp->resop = NFS4_OP_SETCLIENTID;
@@ -116,7 +116,7 @@ enum nfs_req_result nfs4_op_setclientid(struct nfs_argop4 *op,
 		 arg_SETCLIENTID4->callback.cb_location.r_netid,
 		 arg_SETCLIENTID4->callback_ident);
 
-	server_addr = get_raddr(data->req->rq_xprt);
+	server_addr = get_ip_addr(svc_getrpclocal(data->req->rq_xprt));
 	/* Do we already have one or more records for client id (x)? */
 	client_record = get_client_record(arg_SETCLIENTID4->client.id.id_val,
 					  arg_SETCLIENTID4->client.id.id_len,
