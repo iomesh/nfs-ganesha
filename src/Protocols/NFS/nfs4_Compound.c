@@ -745,7 +745,7 @@ enum nfs_req_result complete_op(compound_data_t *data, nfsstat4 *status,
 
 out:
 
-	server_stats_nfsv4_op_done(data->opcode, &data->op_start_time, *status);
+	server_stats_nfsv4_op_done(data, &data->op_start_time, *status);
 #ifdef USE_MINITRACE
 	mtr_destroy_loc_span(op_complete_span);
 #endif
