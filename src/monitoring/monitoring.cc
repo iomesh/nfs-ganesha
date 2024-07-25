@@ -22,10 +22,13 @@
 
 #include <unistd.h>
 
+#include <functional>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #include "prometheus/counter.h"
 #include "prometheus/exposer.h"
@@ -237,6 +240,44 @@ Metrics::Metrics(prometheus::Registry &registry) :
 
 static std::unique_ptr<Metrics> metrics;
 
+template<class K, class T=std::string>
+class SimpleMap {
+    public:
+        SimpleMap(std::function<T(const K& k)> get_value) : get_value_(get_value){ }
+        T GetOrInsert(const K& k) {
+            std::shared_lock rlock(mutex_);
+            auto iter = map_.find(k);
+            if (iter != map_.end()) {
+                return iter->second;
+            }
+            rlock.unlock();
+            std::shared_lock wlock(mutex_);
+            iter = map_.find(k);
+            if (iter != map_.end()) {
+                return iter->second;
+            }
+            auto value = get_value_(k);
+            map_.emplace(k, value);
+            return value;
+        }
+    private:
+        std::shared_mutex mutex_;
+        std::function<T(const K& k)> get_value_;
+        std::map<K, T> map_;
+};
+
+static SimpleMap<export_id_t, std::string> exportLabels([](const export_id_t& export_id){
+    std::ostringstream ss;
+    ss << "export_id=" << export_id;
+    return ss.str();
+});
+static std::string GetExportLabel(export_id_t export_id) {
+  return exportLabels.GetOrInsert(export_id);
+}
+
+std::unique_ptr<prometheus::Exposer> exposer;
+std::shared_ptr<prometheus::Registry> registry;
+
 static std::string trimIPv6Prefix(const std::string input) {
   const std::string prefix("::ffff:");
   if (input.find(prefix) == 0) {
@@ -245,19 +286,7 @@ static std::string trimIPv6Prefix(const std::string input) {
   return input;
 }
 
-static std::map<export_id_t, std::string> exportLabels;
 
-const std::string GetExportLabel(export_id_t export_id) {
-  if (exportLabels.find(export_id) == exportLabels.end()) {
-    std::ostringstream ss;
-    ss << "export_id=" << export_id;
-    exportLabels[export_id] = ss.str();
-  }
-  return exportLabels[export_id];
-}
-
-std::unique_ptr<prometheus::Exposer> exposer;
-std::shared_ptr<prometheus::Registry> registry;
 
 static void toLowerCase(std::string &s) {
   transform(s.begin(), s.end(), s.begin(), ::tolower);
