@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <jemalloc/jemalloc.h>
 #include <malloc.h>
 
 #include "log.h"
@@ -302,6 +303,8 @@ static void reaper_run(struct fridgethr_context *ctx)
 	     reap_hash_table(ht_unconfirmed_client_id));
 
 	rst->count += reap_expired_open_owners();
+
+	malloc_stats_print(NULL, NULL, NULL);
 	if (nfs_param.core_param.malloc_trim)
 		reap_malloc_frag();
 }
