@@ -290,19 +290,19 @@ static std::string GetExportLabel(export_id_t export_id) {
 }
 
 static SimpleMap<in_addr_t, std::string> ip2str([](const in_addr_t& ip_addr){
-		struct in_addr s_addr;
-		s_addr.s_addr = htonl(ip_addr);
-		char addr_str[INET_ADDRSTRLEN];
-		const char *ip_str = inet_ntop(AF_INET, &s_addr, addr_str, INET_ADDRSTRLEN);
-    if (unlikely(ip_str == NULL))
-      return std::string("");
-    return std::string(ip_str);
+  struct in_addr s_addr;
+  s_addr.s_addr = htonl(ip_addr);
+  char addr_str[INET_ADDRSTRLEN];
+  const char *ip_str = inet_ntop(AF_INET, &s_addr, addr_str, INET_ADDRSTRLEN);
+  if (unlikely(ip_str == NULL))
+    return std::string("");
+  return std::string(ip_str);
 });
 
 std::unique_ptr<prometheus::Exposer> exposer;
 std::shared_ptr<prometheus::Registry> registry;
 
-static std::string trimIPv6Prefix(const std::string input) {
+static std::string trimIPv6Prefix(const std::string& input) {
   const std::string prefix("::ffff:");
   if (input.find(prefix) == 0) {
     return input.substr(prefix.size());
@@ -316,12 +316,12 @@ static void toLowerCase(std::string &s) {
 
 static void observeNfsRequest(const char *operation,
                               const nsecs_elapsed_t request_time,
-                              const char* version,
-                              const char* statusLabel,
+                              const char *version,
+                              const char *statusLabel,
                               const export_id_t export_id,
-                              const char* export_path,
+                              const char *fullpath,
                               const in_addr_t server_addr,
-                              const char* client_ip) {
+                              const char *client_ip) {
   const int64_t latency_ms = request_time / NS_PER_MSEC;
   std::string operationLowerCase = std::string(operation);
   toLowerCase(operationLowerCase);
@@ -336,12 +336,12 @@ static void observeNfsRequest(const char *operation,
               {kOperation, operationLowerCase}})
         .Increment();
     std::string server_ip = ip2str.GetOrInsert(server_addr);
-    if (export_id != 0 && export_path != NULL && strlen(export_path) > 1
+    if (export_id != 0 && fullpath != NULL && strlen(fullpath) > 1
         && !server_ip.empty()) {
       metrics->lastClientUpdate
           .Add({{kClient, client},
                 {kServer, server_ip},
-                {kExportName, export_path + 1}, // skip the beginning '/'
+                {kExportName, fullpath + 1}, // skip the beginning '/'
                 {kVersion, version}})
           .Set(epoch);
     }
@@ -382,7 +382,7 @@ static void observeNfsRequest(const char *operation,
 extern "C" {
 
 void monitoring_register_export_label(const export_id_t export_id,
-                                      const char* label) {
+                                      const char *label) {
   exportLabels.InsertOrUpdate(export_id, std::string(label));
 }
 
@@ -405,17 +405,17 @@ void monitoring_nfs3_request(const uint32_t proc,
                              const nsecs_elapsed_t request_time,
                              const nfsstat3 nfs_status,
                              const export_id_t export_id,
-                             const char *export_path,
+                             const char *fullpath,
                              const in_addr_t server_addr,
                              const char *client_ip) {
-  const char* version = "NFSv3";
+  const char *version = "NFSv3";
   const char *operation = nfsproc3_to_str(proc);
   const char *statusLabel = nfsstat3_to_str(nfs_status);
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-          export_path, server_addr, client_ip);
+          fullpath, server_addr, client_ip);
 }
 
-static const char* nfsversion4_to_str(uint32_t minorversion) {
+static const char *nfsversion4_to_str(uint32_t minorversion) {
   switch (minorversion) {
     case 0:
       return "NFSv4";
@@ -433,14 +433,14 @@ void monitoring_nfs4_request(const uint32_t op,
                              const nsecs_elapsed_t request_time,
                              const nfsstat4 status,
                              const export_id_t export_id,
-                             const char *export_path,
+                             const char *fullpath,
                              const in_addr_t server_addr,
                              const char *client_ip) {
   const char *operation = nfsop4_to_str(op);
-  const char* version = nfsversion4_to_str(minor_version);
+  const char *version = nfsversion4_to_str(minor_version);
   const char *statusLabel = nfsstat4_to_str(status);
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-                    export_path, server_addr, client_ip);
+                    fullpath, server_addr, client_ip);
 }
 
 void monitoring_nfs_io(const size_t bytes_requested,
@@ -448,7 +448,7 @@ void monitoring_nfs_io(const size_t bytes_requested,
                        const bool success,
                        const bool is_write,
                        const export_id_t export_id,
-                       const char* client_ip) {
+                       const char *client_ip) {
   const std::string operation(is_write ? "write" : "read");
   const size_t bytes_received = (is_write ? 0 : bytes_transferred);
   const size_t bytes_sent = (is_write ? bytes_transferred : 0);
