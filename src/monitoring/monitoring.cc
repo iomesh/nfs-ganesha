@@ -22,10 +22,13 @@
 
 #include <unistd.h>
 
+#include <functional>
 #include <map>
 #include <memory>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #include "prometheus/counter.h"
 #include "prometheus/exposer.h"
@@ -54,11 +57,13 @@ static const std::initializer_list<double> latencyBuckets =
  12.9, 19.4, 29.1, 43.7, 65.6, 98.5, 147, 221, 332, 498, 748, 1122, 1683, 2525,
  3787, 5681, 8522, 12783};
 
-static const char kClient[] = "client";
-static const char kExport[] = "export";
+static const char kClient[] = "client_ip";
+static const char kServer[] = "server_ip";
+static const char kExport[] = "export";  // export id in Export Block, namespace id in SFS
+static const char kExportName[] = "export_name"; // the path in Export Block, namespace name in SFS
 static const char kOperation[] = "operation";
 static const char kStatus[] = "status";
-static const char kVersion[] = "version";
+static const char kVersion[] = "version";  // NFSv3, NFSv4..
 
 namespace ganesha_monitoring {
 
@@ -237,7 +242,67 @@ Metrics::Metrics(prometheus::Registry &registry) :
 
 static std::unique_ptr<Metrics> metrics;
 
-static std::string trimIPv6Prefix(const std::string input) {
+template<class K, class T=std::string>
+class SimpleMap {
+    public:
+        SimpleMap(std::function<T(const K& k)> get_value) : get_value_(get_value){ }
+
+        T GetOrInsert(const K& k) {
+            std::shared_lock rlock(mutex_);
+            auto iter = map_.find(k);
+            if (iter != map_.end()) {
+                return iter->second;
+            }
+            rlock.unlock();
+            std::unique_lock wlock(mutex_);
+            iter = map_.find(k);
+            if (iter != map_.end()) {
+                return iter->second;
+            }
+            auto v = get_value_(k);
+            map_.emplace(k, v);
+            return v;
+        }
+
+        // @ret whether the key already exists
+        bool InsertOrUpdate(const K& k, const T& v) {
+          std::unique_lock wlock(mutex_);
+          bool exist = map_.find(k) != map_.end();
+          map_[k] = v;
+          return exist;
+        }
+
+    private:
+        std::function<T(const K& k)> get_value_;
+
+        std::shared_mutex mutex_;
+        std::map<K, T> map_;
+};
+
+static SimpleMap<export_id_t, std::string> exportLabels([](const export_id_t& export_id){
+    std::ostringstream ss;
+    ss << "export_id=" << export_id;
+    return ss.str();
+});
+
+static std::string GetExportLabel(export_id_t export_id) {
+  return exportLabels.GetOrInsert(export_id);
+}
+
+static SimpleMap<in_addr_t, std::string> ip2str([](const in_addr_t& ip_addr){
+  struct in_addr s_addr;
+  s_addr.s_addr = htonl(ip_addr);
+  char addr_str[INET_ADDRSTRLEN];
+  const char *ip_str = inet_ntop(AF_INET, &s_addr, addr_str, INET_ADDRSTRLEN);
+  if (unlikely(ip_str == NULL))
+    return std::string("");
+  return std::string(ip_str);
+});
+
+std::unique_ptr<prometheus::Exposer> exposer;
+std::shared_ptr<prometheus::Registry> registry;
+
+static std::string trimIPv6Prefix(const std::string& input) {
   const std::string prefix("::ffff:");
   if (input.find(prefix) == 0) {
     return input.substr(prefix.size());
@@ -245,30 +310,18 @@ static std::string trimIPv6Prefix(const std::string input) {
   return input;
 }
 
-static std::map<export_id_t, std::string> exportLabels;
-
-const std::string GetExportLabel(export_id_t export_id) {
-  if (exportLabels.find(export_id) == exportLabels.end()) {
-    std::ostringstream ss;
-    ss << "export_id=" << export_id;
-    exportLabels[export_id] = ss.str();
-  }
-  return exportLabels[export_id];
-}
-
-std::unique_ptr<prometheus::Exposer> exposer;
-std::shared_ptr<prometheus::Registry> registry;
-
 static void toLowerCase(std::string &s) {
   transform(s.begin(), s.end(), s.begin(), ::tolower);
 }
 
 static void observeNfsRequest(const char *operation,
                               const nsecs_elapsed_t request_time,
-                              const char* version,
-                              const char* statusLabel,
+                              const char *version,
+                              const char *statusLabel,
                               const export_id_t export_id,
-                              const char* client_ip) {
+                              const char *fullpath,
+                              const in_addr_t server_addr,
+                              const char *client_ip) {
   const int64_t latency_ms = request_time / NS_PER_MSEC;
   std::string operationLowerCase = std::string(operation);
   toLowerCase(operationLowerCase);
@@ -282,7 +335,16 @@ static void observeNfsRequest(const char *operation,
         .Add({{kClient, client},
               {kOperation, operationLowerCase}})
         .Increment();
-    metrics->lastClientUpdate.Add({{kClient, client}}).Set(epoch);
+    std::string server_ip = ip2str.GetOrInsert(server_addr);
+    if (export_id != 0 && fullpath != NULL && strlen(fullpath) > 1
+        && !server_ip.empty()) {
+      metrics->lastClientUpdate
+          .Add({{kClient, client},
+                {kServer, server_ip},
+                {kExportName, fullpath + 1}, // skip the beginning '/'
+                {kVersion, version}})
+          .Set(epoch);
+    }
   }
   metrics->errorsByVersionOperationStatus
       .Add({{kVersion, version},
@@ -320,8 +382,8 @@ static void observeNfsRequest(const char *operation,
 extern "C" {
 
 void monitoring_register_export_label(const export_id_t export_id,
-                                      const char* label) {
-  exportLabels[export_id] = std::string(label);
+                                      const char *label) {
+  exportLabels.InsertOrUpdate(export_id, std::string(label));
 }
 
 void monitoring_init(const uint16_t port) {
@@ -343,24 +405,42 @@ void monitoring_nfs3_request(const uint32_t proc,
                              const nsecs_elapsed_t request_time,
                              const nfsstat3 nfs_status,
                              const export_id_t export_id,
-                             const char* client_ip) {
-  const char* version = "nfs3";
+                             const char *fullpath,
+                             const in_addr_t server_addr,
+                             const char *client_ip) {
+  const char *version = "NFSv3";
   const char *operation = nfsproc3_to_str(proc);
   const char *statusLabel = nfsstat3_to_str(nfs_status);
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-                    client_ip);
+          fullpath, server_addr, client_ip);
+}
+
+static const char *nfsversion4_to_str(uint32_t minorversion) {
+  switch (minorversion) {
+    case 0:
+      return "NFSv4";
+    case 1:
+      return "NFSv4.1";
+    case 2:
+      return "NFSv4.2";
+    default:
+      return "NFSv4.3+";
+  }
 }
 
 void monitoring_nfs4_request(const uint32_t op,
+                             const uint32_t minor_version,
                              const nsecs_elapsed_t request_time,
                              const nfsstat4 status,
                              const export_id_t export_id,
-                             const char* client_ip) {
-  const char* version = "nfs4";
+                             const char *fullpath,
+                             const in_addr_t server_addr,
+                             const char *client_ip) {
   const char *operation = nfsop4_to_str(op);
+  const char *version = nfsversion4_to_str(minor_version);
   const char *statusLabel = nfsstat4_to_str(status);
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-                    client_ip);
+                    fullpath, server_addr, client_ip);
 }
 
 void monitoring_nfs_io(const size_t bytes_requested,
@@ -368,7 +448,7 @@ void monitoring_nfs_io(const size_t bytes_requested,
                        const bool success,
                        const bool is_write,
                        const export_id_t export_id,
-                       const char* client_ip) {
+                       const char *client_ip) {
   const std::string operation(is_write ? "write" : "read");
   const size_t bytes_received = (is_write ? 0 : bytes_transferred);
   const size_t bytes_sent = (is_write ? bytes_transferred : 0);

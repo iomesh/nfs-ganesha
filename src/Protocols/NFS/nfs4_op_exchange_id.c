@@ -40,33 +40,6 @@
 #include "sal_functions.h"
 #include "nfs_creds.h"
 
-uint32_t get_raddr(SVCXPRT *xprt)
-{
-	sockaddr_t *ss = svc_getrpclocal(xprt);
-	int addr = 0;
-
-	if (ss == NULL)
-		return addr;
-
-	switch (ss->ss_family) {
-	case AF_INET6:
-		{
-			void *ab = &(((struct sockaddr_in6 *)ss)->
-					sin6_addr.s6_addr[12]);
-			addr = ntohl(*(uint32_t *) ab);
-		}
-		break;
-	case AF_INET:
-		addr = ntohl(((struct sockaddr_in *)ss)->sin_addr.s_addr);
-
-		break;
-	default:
-		break;
-	}
-
-	return addr;
-}
-
 /* spi_ops (spo_must_enforce bitmap + spo_must_allow bitmap) + 4 spi_ fields +
  * len
  */
@@ -200,8 +173,7 @@ enum nfs_req_result nfs4_op_exchange_id(struct nfs_argop4 *op,
 	update = (arg_EXCHANGE_ID4->eia_flags &
 		  EXCHGID4_FLAG_UPD_CONFIRMED_REC_A) != 0;
 
-	server_addr = get_raddr(data->req->rq_xprt);
-
+	server_addr = get_ip_addr(svc_getrpclocal(data->req->rq_xprt));
 	/* Do we already have one or more records for client id (x)? */
 	client_record = get_client_record(
 		arg_EXCHANGE_ID4->eia_clientowner.co_ownerid.co_ownerid_val,

@@ -1351,7 +1351,7 @@ static void record_v3_full_stats(struct svc_req *req,
 			       int status, bool dup);
 #endif
 
-static void record_v4_full_stats(uint32_t proc,
+static void record_v4_full_stats(compound_data_t *data,
 			       nsecs_elapsed_t request_time,
 			       nfsstat4 status);
 
@@ -1433,9 +1433,10 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
  * Called from nfs4_compound at compound loop completion
  */
 
-void server_stats_nfsv4_op_done(int proto_op,
+void server_stats_nfsv4_op_done(compound_data_t *data,
 				struct timespec *start_time, int status)
 {
+	int proto_op = data->opcode;
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
 	nsecs_elapsed_t time_diff;
@@ -1452,7 +1453,7 @@ void server_stats_nfsv4_op_done(int proto_op,
 	time_diff = timespec_diff(start_time, &current_time);
 
 	if (nfs_param.core_param.enable_FULLV4STATS)
-		record_v4_full_stats(proto_op, time_diff, status);
+		record_v4_full_stats(data, time_diff, status);
 
 	if (client != NULL) {
 		struct server_stats *server_st;
@@ -3077,12 +3078,15 @@ static void record_v3_full_stats(struct svc_req *req,
 		uint16_t export_id = 0;
 		struct fsal_export *export = op_ctx->fsal_export;
 		struct gsh_client *client = op_ctx->client;
+		const char *fullpath = op_ctx->ctx_fullpath->gr_val;
 		const char *client_ip =
 			client == NULL ? "" : client->hostaddr_str;
 		if (export != NULL)
 			export_id = export->export_id;
+		in_addr_t server_addr =
+			get_ip_addr(svc_getrpclocal(req->rq_xprt));
 		monitoring_nfs3_request(proc, request_time, status,
-					export_id, client_ip);
+				export_id, fullpath, server_addr, client_ip);
 	}
 #endif
 
@@ -3113,21 +3117,27 @@ void reset_v3_full_stats(void)
 }
 #endif
 
-static void record_v4_full_stats(uint32_t proc,
+static void record_v4_full_stats(compound_data_t *data,
 			       nsecs_elapsed_t request_time,
 			       nfsstat4 status)
 {
+	int proc = data->opcode;
+
 #ifdef USE_MONITORING
 	uint16_t export_id = 0;
 	struct fsal_export *export = op_ctx->fsal_export;
 	struct gsh_client *client = op_ctx->client;
+	const char *fullpath = op_ctx->ctx_fullpath->gr_val;
 	const char *client_ip = client == NULL ? "" : client->hostaddr_str;
+	in_addr_t server_addr =
+		get_ip_addr(svc_getrpclocal(data->req->rq_xprt));
 
 	if (export != NULL)
 		export_id = export->export_id;
-	monitoring_nfs4_request(proc, request_time, status, export_id,
-				client_ip);
+	monitoring_nfs4_request(proc, op_ctx->nfs_minorvers, request_time,
+			status, export_id, fullpath, server_addr, client_ip);
 #endif
+
 	if (proc > NFS_V42_NB_OPERATION) {
 		LogCrit(COMPONENT_DBUS,
 			"proc is more than NFS4_OP_WRITE_SAME: %d\n",
