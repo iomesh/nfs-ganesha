@@ -166,16 +166,21 @@ void fsal_obj_handle_init(struct fsal_obj_handle *obj, struct fsal_export *exp,
 	obj->type = type;
 	PTHREAD_RWLOCK_init(&obj->obj_lock, NULL);
 
+    /*
 	PTHREAD_RWLOCK_wrlock(&obj->fsal->fsm_lock);
 	glist_add(&obj->fsal->handles, &obj->handles);
 	PTHREAD_RWLOCK_unlock(&obj->fsal->fsm_lock);
+    */
 }
 
 void fsal_obj_handle_fini(struct fsal_obj_handle *obj)
 {
+
+    /*
 	PTHREAD_RWLOCK_wrlock(&obj->fsal->fsm_lock);
 	glist_del(&obj->handles);
 	PTHREAD_RWLOCK_unlock(&obj->fsal->fsm_lock);
+    */
 	PTHREAD_RWLOCK_destroy(&obj->obj_lock);
 	memset(&obj->obj_ops, 0, sizeof(obj->obj_ops));	/* poison myself */
 	obj->fsal = NULL;
