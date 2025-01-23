@@ -92,12 +92,19 @@ int nfs3_commit(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 				  arg->arg_commit3.count, &cookie);
 
 	if (FSAL_IS_ERROR(fsal_status)) {
-		res->res_commit3.status = nfs3_Errno_status(fsal_status);
-
-		nfs_SetWccData(NULL, obj,
-			       &res->res_commit3.COMMIT3res_u.resfail.file_wcc);
-
-		rc = NFS_REQ_OK;
+		LogFullDebug(COMPONENT_NFSPROTO,
+			"failed commit: fsal_status=%s",
+			fsal_err_txt(fsal_status));
+		if (nfs_RetryableError(fsal_status.major)) {
+			/* Drop retryable errors. */
+			rc = NFS_REQ_DROP;
+		} else {
+			res->res_commit3.status =
+				nfs3_Errno_status(fsal_status);
+			nfs_SetWccData(NULL, obj, NULL,
+			  &res->res_commit3.COMMIT3res_u.resfail.file_wcc);
+			rc = NFS_REQ_OK;
+		}
 		goto out;
 	}
 
