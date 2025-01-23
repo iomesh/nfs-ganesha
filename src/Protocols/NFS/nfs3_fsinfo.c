@@ -125,8 +125,7 @@ int nfs3_fsinfo(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	/* This field is generally unused, it will be removed in V4 */
 	FSINFO_FIELD->wtmult = DEV_BSIZE;
 
-	FSINFO_FIELD->dtpref =
-		atomic_fetch_uint64_t(&op_ctx->ctx_export->PrefReaddir);
+	FSINFO_FIELD->dtpref = 262144;
 	FSINFO_FIELD->maxfilesize =
 	    op_ctx->fsal_export->exp_ops.fs_maxfilesize(op_ctx->fsal_export);
 	FSINFO_FIELD->time_delta.tv_sec = dynamicinfo.time_delta.tv_sec;
