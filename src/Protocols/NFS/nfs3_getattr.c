@@ -90,12 +90,17 @@ int nfs3_getattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	status = obj->obj_ops->getattrs(obj, attrs);
 
 	if (FSAL_IS_ERROR(status)) {
-		res->res_getattr3.status = nfs3_Errno_status(status);
-
 		LogFullDebug(COMPONENT_NFSPROTO,
-			     "nfs_Getattr set failed status v3");
-
-		rc = NFS_REQ_OK;
+			"failed getattr: fsal_status=%s",
+			fsal_err_txt(status));
+		if (nfs_RetryableError(status.major)) {
+			/* Drop retryable errors. */
+			rc = NFS_REQ_DROP;
+		} else {
+			res->res_getattr3.status =
+				nfs3_Errno_status(status);
+			rc = NFS_REQ_OK;
+		}
 		goto out;
 	}
 
