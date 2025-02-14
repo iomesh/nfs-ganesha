@@ -192,6 +192,10 @@ state_status_t state_error_convert(fsal_status_t fsal_status)
 		return STATE_NOT_FOUND;
 
 	case ERR_FSAL_DELAY:
+		/* this error code from our FSAL is NOT
+		 * lock conflict.
+		 */
+		return STATE_FSAL_DELAY;
 	case ERR_FSAL_ACCESS:
 		/* EDELAY and EACCESS are documented by fcntl as
 		 * indicating lock conflict
