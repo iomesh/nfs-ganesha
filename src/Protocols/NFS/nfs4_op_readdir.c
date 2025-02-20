@@ -116,7 +116,6 @@ fsal_errors_t nfs4_readdir_callback(void *opaque,
 	u_int pos_start = xdr_getpos(&tracker->xdr);
 	u_int mem_left = tracker->mem_avail - pos_start;
 	component4 name;
-	bool_t res_false = false;
 	bool_t lock_dir = false;
 	struct fsal_obj_handle *saved_current_obj = NULL;
 
@@ -467,11 +466,8 @@ not_junction:
 
  failure:
 
-	/* Reset to where we started this entry and encode a boolean
-	 * false instead (entry_follows is false).
-	 */
-	if (!xdr_setpos(&tracker->xdr, pos_start) ||
-	    !xdr_bool(&tracker->xdr, &res_false)) {
+	/* Reset to where we started this entry. */
+	if (!xdr_setpos(&tracker->xdr, pos_start)) {
 		/* Oops, what broke... */
 		LogCrit(COMPONENT_NFS_READDIR,
 			"Unexpected XDR failure processing readdir result");
@@ -726,20 +722,18 @@ enum nfs_req_result nfs4_op_readdir(struct nfs_argop4 *op,
 		u_int pos_end;
 		bool_t tmp;
 
-		if (eod_met) {
-			/* If we hit end of directory, then the dirlist4 we have
-			 * encoded so far has a complete entry (we MUST have
-			 * consumed the last entry and encoded it). Now we need
-			 * to encode a FALSE to indicate no next entry.
-			 */
-			tmp = FALSE;
-			if (!xdr_bool(&tracker.xdr, &tmp)) {
-				/* Oops... */
-				LogCrit(COMPONENT_NFS_READDIR,
-					"Encode of no next entry failed.");
-				res_READDIR4->status = NFS4ERR_SERVERFAULT;
-				goto out_destroy;
-			}
+		/* The dirlist4 we have encoded so far has a complete
+		 * entry (we MUST have consumed the last entry and
+		 * encoded it). Now we need to encode a FALSE to
+		 * indicate no next entry.
+		 */
+		tmp = FALSE;
+		if (!xdr_bool(&tracker.xdr, &tmp)) {
+			/* Oops... */
+			LogCrit(COMPONENT_NFS_READDIR,
+				"Encode of no next entry failed.");
+			res_READDIR4->status = NFS4ERR_SERVERFAULT;
+			goto out_destroy;
 		}
 
 		/* Serialize eod_met into the entries buffer */
