@@ -90,13 +90,9 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	status = obj->obj_ops->getattrs(obj, attrs);
 
 	if (FSAL_IS_ERROR(status)) {
-		res->res_getacl.status = nfs3_Errno_status(status);
-
 		LogFullDebug(COMPONENT_NFSPROTO,
 			 "nfsacl_Getacl set failed status v3");
-
-		rc = NFS_REQ_OK;
-		goto out;
+		goto out_fail;
 	}
 
 	/*Set attributes_follow*/
@@ -105,13 +101,9 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	/* Set Mask*/
 	if (arg->arg_getacl.mask &
 		~(NFS_ACL|NFS_ACLCNT|NFS_DFACL|NFS_DFACLCNT)) {
-		res->res_getacl.status = nfs3_Errno_status(status);
-
 		LogFullDebug(COMPONENT_NFSPROTO,
 			 "Invalid args");
-
-		rc = NFS_REQ_OK;
-		goto out;
+		goto out_fail;
 	}
 	res->res_getacl.getaclres_u.resok.mask = arg->arg_getacl.mask;
 
@@ -127,7 +119,7 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 			LogWarn(COMPONENT_FSAL,
 					"failed to convert fsal acl to Access posix acl");
 			status = fsalstat(ERR_FSAL_FAULT, 0);
-			goto error;
+			goto out_fail;
 		} else {
 			encode_acl = encode_posix_acl(acl,
 				ACL_TYPE_ACCESS, attrs);
@@ -135,7 +127,7 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 				LogFullDebug(COMPONENT_NFSPROTO,
 					"encode_posix_acl return NULL");
 				status = fsalstat(ERR_FSAL_FAULT, 0);
-				goto error;
+				goto out_fail;
 			}
 			res->res_getacl.getaclres_u.resok.acl_access =
 				encode_acl;
@@ -156,7 +148,7 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 			LogWarn(COMPONENT_FSAL,
 					"failed to convert fsal acl to Default posix acl");
 			status = fsalstat(ERR_FSAL_FAULT, 0);
-			goto error;
+			goto out_fail;
 		} else {
 			encode_df_acl = encode_posix_acl(d_acl,
 				ACL_TYPE_DEFAULT, attrs);
@@ -164,7 +156,7 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 				LogFullDebug(COMPONENT_NFSPROTO,
 					"encode_posix_acl return NULL");
 				status = fsalstat(ERR_FSAL_FAULT, 0);
-				goto error;
+				goto out_fail;
 			}
 			res->res_getacl.getaclres_u.resok.acl_default =
 				encode_df_acl;
@@ -195,10 +187,18 @@ int nfsacl_getacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	if (d_acl)
 		acl_free(d_acl);
 
+	LogDebug(COMPONENT_NFSPROTO,
+		"Get acl Result %s%s",
+		nfsstat3_to_str(res->res_getacl.status),
+		rc == NFS_REQ_DROP ? " Dropping response" : "");
+
 	return rc;
 
- error:
-	rc = NFS_REQ_OK;
+out_fail:
+	if (nfs_RetryableError(status.major)) {
+		/* Drop retryable request. */
+		rc = NFS_REQ_DROP;
+	}
 	res->res_getacl.status = nfs3_Errno_status(status);
 	goto out;
 #else

@@ -145,7 +145,9 @@ int nfs3_setattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		 */
 		if (!nfs_get_grace_status(false)) {
 			res->res_setattr3.status = NFS3ERR_JUKEBOX;
-			rc = NFS_REQ_OK;
+			if (nfs_DropDelayErrors()) {
+				rc = NFS_REQ_DROP;
+			}
 			LogFullDebug(COMPONENT_NFSPROTO,
 				     "nfs_in_grace is true");
 			goto out;
@@ -162,19 +164,25 @@ int nfs3_setattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 				nfs3_Errno_status(fsal_status);
 			LogFullDebug(COMPONENT_NFSPROTO,
 				     "fsal_setattr failed");
-			goto out_fail;
+			if (nfs_RetryableError(fsal_status.major)) {
+				/* Drop retryable request. */
+				rc = NFS_REQ_DROP;
+			}
+			goto out;
 		}
 	}
 
 	/* Set the NFS return */
 	res->res_setattr3.status = NFS3_OK;
 
-	/* Build Weak Cache Coherency data */
-	nfs_SetWccData(&pre_attr, obj, &resok->obj_wcc);
-
 	rc = NFS_REQ_OK;
 
  out:
+
+	if (rc != NFS_REQ_DROP) {
+		/* Build Weak Cache Coherency data */
+		nfs_SetWccData(&pre_attr, obj, &resok->obj_wcc);
+	}
 
 	/* Release the attributes (may release an inherited ACL) */
 	fsal_release_attrs(&setattr);
@@ -189,17 +197,6 @@ int nfs3_setattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		 rc == NFS_REQ_DROP ? " Dropping response" : "");
 
 	return rc;
-
- out_fail:
-
-	nfs_SetWccData(&pre_attr, obj, &resfail->obj_wcc);
-
-	if (nfs_RetryableError(fsal_status.major)) {
-		/* Drop retryable request. */
-		rc = NFS_REQ_DROP;
-	}
-
-	goto out;
 }				/* nfs3_setattr */
 
 /**
