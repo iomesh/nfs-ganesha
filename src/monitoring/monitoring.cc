@@ -403,14 +403,18 @@ void monitoring_init(const uint16_t port) {
 
 void monitoring_nfs3_request(const uint32_t proc,
                              const nsecs_elapsed_t request_time,
-                             const nfsstat3 nfs_status,
+                             const enum nfs_req_result result,
+                             const nfsstat3 status,
                              const export_id_t export_id,
                              const char *fullpath,
                              const in_addr_t server_addr,
                              const char *client_ip) {
   const char *version = "NFSv3";
   const char *operation = nfsproc3_to_str(proc);
-  const char *statusLabel = nfsstat3_to_str(nfs_status);
+  const char *statusLabel = result == NFS_REQ_OK ?
+    nfsstat3_to_str(status) :
+    nfs_req_result_to_str(result);
+
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
           fullpath, server_addr, client_ip);
 }
