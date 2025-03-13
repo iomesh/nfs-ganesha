@@ -45,9 +45,12 @@
 extern "C" {
 #endif
 
+enum nfs_req_result;
+
 char *nfsstat3_to_str(nfsstat3 code);
 char *nfsstat4_to_str(nfsstat4 code);
 char *nfstype3_to_str(ftype3 code);
+char *nfs_req_result_to_str(enum nfs_req_result code);
 const char *auth_stat2str(enum auth_stat);
 
 #ifdef _USE_NFS3

@@ -37,6 +37,7 @@
 extern "C" {
 #endif
 
+enum nfs_req_result;
 typedef uint16_t export_id_t;
 
 /* Allow FSALs to register a human readable label used for per-export metrics.
@@ -62,6 +63,7 @@ void monitoring_init(const uint16_t port);
 
 void monitoring_nfs3_request(const uint32_t proc,
 			     const nsecs_elapsed_t request_time,
+			     const nfs_req_result result,
 			     const nfsstat3 status,
 			     const export_id_t export_id,
 			     const char *export_path,
