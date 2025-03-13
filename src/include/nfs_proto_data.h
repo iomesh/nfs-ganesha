@@ -49,6 +49,7 @@
 #include "nfs4.h"
 #include "nlm4.h"
 #include "nfsacl.h"
+#include "nfs_req_result.h"
 #ifdef USE_MINITRACE
 #include "minitrace.h"
 #endif  /* USE_MINITRACE */
@@ -181,16 +182,6 @@ typedef union nfs_res__ {
 				   RPCSEC_GSS */
 #define MAKES_IO	0x0010	/* Request may do I/O
 				   (not allowed on MD ONLY exports */
-
-enum nfs_req_result {
-	NFS_REQ_OK,
-	NFS_REQ_DROP,
-	NFS_REQ_ERROR,
-	NFS_REQ_REPLAY,
-	NFS_REQ_ASYNC_WAIT,
-	NFS_REQ_XPRT_DIED,
-	NFS_REQ_AUTH_ERR,
-};
 
 /* Async process synchronizations flags to be used with
  * atomic_postset_uint32_t_bits

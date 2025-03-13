@@ -62,6 +62,7 @@
 #include <abstract_atomic.h>
 #include "nfs_proto_functions.h"
 #include "nfs_convert.h"
+#include "nfs_req_result.h"
 
 #ifdef USE_MONITORING
 #include "monitoring.h"
@@ -1346,9 +1347,9 @@ void server_stats_9p_done(u8 opc, struct _9p_request_data *req9p)
 #endif
 
 #ifdef _USE_NFS3
-static void record_v3_full_stats(struct svc_req *req,
+static void record_v3_full_stats(nfs_request_t *reqdata,
 			       nsecs_elapsed_t request_time,
-			       int status, bool dup);
+			       int result, bool dup);
 #endif
 
 static void record_v4_full_stats(uint32_t proc,
@@ -1397,7 +1398,7 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 
 #ifdef _USE_NFS3
 	if (nfs_param.core_param.enable_FULLV3STATS)
-		record_v3_full_stats(req, time_diff,
+		record_v3_full_stats(reqdata, time_diff,
 			    rc, dup);
 #endif
 	if (client != NULL) {
@@ -3064,27 +3065,14 @@ void server_stats_allops_free(struct gsh_clnt_allops_stats *statsp)
 }
 
 #ifdef _USE_NFS3
-static void record_v3_full_stats(struct svc_req *req,
+static void record_v3_full_stats(nfs_request_t *reqdata,
 			       nsecs_elapsed_t request_time,
-			       int status, bool dup)
+			       int result, bool dup)
 {
+	struct svc_req *req = &reqdata->svc;
 	uint32_t prog = req->rq_msg.cb_prog;
 	uint32_t vers = req->rq_msg.cb_vers;
 	uint32_t proc = req->rq_msg.cb_proc;
-
-#ifdef USE_MONITORING
-	if (prog == NFS_PROGRAM) {
-		uint16_t export_id = 0;
-		struct fsal_export *export = op_ctx->fsal_export;
-		struct gsh_client *client = op_ctx->client;
-		const char *client_ip =
-			client == NULL ? "" : client->hostaddr_str;
-		if (export != NULL)
-			export_id = export->export_id;
-		monitoring_nfs3_request(proc, request_time, status,
-					export_id, client_ip);
-	}
-#endif
 
 	if (prog == NFS_program[P_NFS] && vers == NFS_V3) {
 		if (proc > NFSPROC3_COMMIT) {
@@ -3093,8 +3081,26 @@ static void record_v3_full_stats(struct svc_req *req,
 				proc);
 			return;
 		}
+
+		/* All `nfs_res_t` of NFSv3 operations begins with `nfsstat3` */
+		nfsstat3 status = reqdata->res_nfs ?
+			reqdata->res_nfs->res_getattr3.status :
+			NFS3_OK;
+
 		record_op(&v3_full_stats[proc], request_time,
-			  status == NFS_REQ_OK, dup);
+			  result == NFS_REQ_OK && status == NFS3_OK, dup);
+
+#ifdef USE_MONITORING
+		uint16_t export_id = 0;
+		struct fsal_export *export = op_ctx->fsal_export;
+		struct gsh_client *client = op_ctx->client;
+		const char *client_ip =
+			client == NULL ? "" : client->hostaddr_str;
+		if (export != NULL)
+			export_id = export->export_id;
+		monitoring_nfs3_request(proc, request_time, result, status,
+					export_id, client_ip);
+#endif
 	}
 }
 
