@@ -378,12 +378,25 @@ void monitoring_init(const uint16_t port) {
 
 void monitoring_nfs3_request(const uint32_t proc,
                              const nsecs_elapsed_t request_time,
-                             const nfsstat3 nfs_status,
+                             const nfs_req_result result,
+                             const nfsstat3 status,
                              const export_id_t export_id,
                              const char* client_ip) {
   const char* version = "nfs3";
   const char *operation = nfsproc3_to_str(proc);
-  const char *statusLabel = nfsstat3_to_str(nfs_status);
+  const char *status_str = nfsstat3_to_str(status);
+  const char *statusLabel = status_str;
+
+  std::unique_ptr<std::string> combinedStatus;
+  if (result != NFS_REQ_OK) {
+    const char *result_str = nfs_req_result_to_str(result);
+    statusLabel = result_str;
+    if (status != NFS3_OK) {
+      combinedStatus = std::make_unique<std::string>(std::string(result_str) + ":" + status_str);
+      statusLabel = combinedStatus->c_str();
+    }
+  }
+
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
                     client_ip);
 }

@@ -62,6 +62,7 @@ void monitoring_init(const uint16_t port);
 
 void monitoring_nfs3_request(const uint32_t proc,
 			     const nsecs_elapsed_t request_time,
+			     const nfs_req_result result,
 			     const nfsstat3 status,
 			     const export_id_t export_id,
 			     const char *client_ip);

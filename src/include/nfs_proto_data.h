@@ -191,6 +191,7 @@ enum nfs_req_result {
 	NFS_REQ_XPRT_DIED,
 	NFS_REQ_AUTH_ERR,
 };
+typedef enum nfs_req_result nfs_req_result;
 
 /* Async process synchronizations flags to be used with
  * atomic_postset_uint32_t_bits

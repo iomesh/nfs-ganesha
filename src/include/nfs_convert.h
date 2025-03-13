@@ -37,6 +37,7 @@
 #define _NFS_CONVERT_H
 
 #include "nfs23.h"
+#include "nfs_proto_data.h"
 #include "nfs4.h"
 #include "mount.h"
 #include "fsal.h"
@@ -46,6 +47,7 @@ extern "C" {
 #endif
 
 char *nfsstat3_to_str(nfsstat3 code);
+char *nfs_req_result_to_str(nfs_req_result code);
 char *nfsstat4_to_str(nfsstat4 code);
 char *nfstype3_to_str(ftype3 code);
 const char *auth_stat2str(enum auth_stat);
