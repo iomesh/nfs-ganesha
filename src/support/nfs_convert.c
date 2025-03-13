@@ -500,6 +500,27 @@ char *nfstype3_to_str(ftype3 code)
 	return "UNKNOWN NFSv3 TYPE";
 }
 
+char *nfs_req_result_to_str(enum nfs_req_result code)
+{
+	switch (code) {
+	case NFS_REQ_OK:
+		return "NFS_REQ_OK";
+	case NFS_REQ_DROP:
+		return "NFS_REQ_DROP";
+	case NFS_REQ_ERROR:
+		return "NFS_REQ_ERROR";
+	case NFS_REQ_REPLAY:
+		return "NFS_REQ_REPLAY";
+	case NFS_REQ_ASYNC_WAIT:
+		return "NFS_REQ_ASYNC_WAIT";
+	case NFS_REQ_XPRT_DIED:
+		return "NFS_REQ_XPRT_DIED";
+	case NFS_REQ_AUTH_ERR:
+		return "NFS_REQ_AUTH_ERR";
+	}
+	return "UNKNOWN NFS_REQ_RESULT";
+}
+
 /**
  * @brief Same as htonl, but on 64 bits.
  *

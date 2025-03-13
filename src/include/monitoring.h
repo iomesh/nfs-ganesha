@@ -32,6 +32,7 @@
 
 #include <stddef.h>
 #include "nfs23.h"
+#include "nfs_req_result.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,6 +63,7 @@ void monitoring_init(const uint16_t port);
 
 void monitoring_nfs3_request(const uint32_t proc,
 			     const nsecs_elapsed_t request_time,
+			     const enum nfs_req_result result,
 			     const nfsstat3 status,
 			     const export_id_t export_id,
 			     const char *export_path,
