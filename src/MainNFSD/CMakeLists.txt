@@ -210,12 +210,9 @@ target_link_libraries(ganesha_nfsd
 )
 
 if(ENABLE_SFS)
-  target_link_libraries(ganesha_nfs
-  sfs_recovery_backend
-  -L${PATH_LIBSFS}
-  )
+  target_link_libraries(ganesha_nfsd sfs_recovery_backend)
+  target_link_directories(ganesha_nfsd PUBLIC ${PATH_LIBSFS})
 endif(ENABLE_SFS)
-
 
 if(SANITIZE_ADDRESS)
   set(undef_flags ${LDFLAG_ALLOW_UNDEF})
