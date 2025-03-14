@@ -821,6 +821,11 @@ int nfs4_recovery_init(void)
 		recovery_backend_str(nfs_param.nfsv4_param.recovery_backend));
 
 	switch (nfs_param.nfsv4_param.recovery_backend) {
+#ifdef ENABLE_SFS
+	case RECOVERY_BACKEND_SFS_CLUSTER:
+		sfs_cluster_backend_init(&recovery_backend);
+		break;
+#endif
 	case RECOVERY_BACKEND_FS:
 		fs_backend_init(&recovery_backend);
 		break;
@@ -842,9 +847,6 @@ int nfs4_recovery_init(void)
 	case RECOVERY_BACKEND_RADOS_NG:
 	case RECOVERY_BACKEND_RADOS_CLUSTER:
 #endif
-	case RECOVERY_BACKEND_SFS_CLUSTER:
-		sfs_cluster_backend_init(&recovery_backend);
-		break;
 	default:
 		LogCrit(COMPONENT_CLIENTID, "Unsupported Backend %s",
 			recovery_backend_str(
@@ -1167,7 +1169,11 @@ int load_recovery_param_from_conf(config_file_t parse_tree,
 	case RECOVERY_BACKEND_FS:
 	case RECOVERY_BACKEND_FS_NG:
 		return 0;
-
+#ifdef ENABLE_SFS
+	case RECOVERY_BACKEND_SFS_CLUSTER:
+		// load sfs cluster specific parameters.
+		return sfs_load_config_from_parse(parse_tree, err_type);
+#endif
 	case RECOVERY_BACKEND_RADOS_KV:
 	case RECOVERY_BACKEND_RADOS_NG:
 	case RECOVERY_BACKEND_RADOS_CLUSTER:
@@ -1191,10 +1197,6 @@ int load_recovery_param_from_conf(config_file_t parse_tree,
 
 		return rados.load_config_from_parse(parse_tree, err_type);
 #endif
-
-	case RECOVERY_BACKEND_SFS_CLUSTER:
-		// load sfs cluster specific parameters.
-		return sfs_load_config_from_parse(parse_tree, err_type);
 	default:
 		LogCrit(COMPONENT_CLIENTID, "Unsupported Backend %s",
 			recovery_backend_str(

@@ -206,9 +206,15 @@ target_link_libraries(ganesha_nfsd
   ${MOOSHIKA_LIBRARIES}
   ${MONITORING_LIBRARIES}
   ${MINITRACE_LIBRARIES}
+)
+
+if(ENABLE_SFS)
+  target_link_libraries(ganesha_nfs
   sfs_recovery_backend
   -L${PATH_LIBSFS}
-)
+  )
+endif(ENABLE_SFS)
+
 
 if(SANITIZE_ADDRESS)
   set(undef_flags ${LDFLAG_ALLOW_UNDEF})
