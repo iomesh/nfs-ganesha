@@ -308,6 +308,9 @@ if(USE_MONITORING)
   )
 endif(USE_MONITORING)
 
+goption(ENABLE_SFS "Build into SFS" OFF)
+gopt_test(ENABLE_SFS)
+
 # OpenTelemetry
 goption(USE_MINITRACE "Build telemetry stack" OFF)
 gopt_test(USE_MINITRACE)
@@ -1333,6 +1336,7 @@ message(STATUS "USE_FSAL_GPFS = ${USE_FSAL_GPFS}")
 message(STATUS "USE_FSAL_GLUSTER = ${USE_FSAL_GLUSTER}")
 message(STATUS "USE_FSAL_NULL = ${USE_FSAL_NULL}")
 message(STATUS "USE_FSAL_MEM = ${USE_FSAL_MEM}")
+message(STATUS "ENABLE_SFS = ${ENABLE_SFS}")
 message(STATUS "GSH_CAN_HOST_LOCAL_FS = ${GSH_CAN_HOST_LOCAL_FS}")
 message(STATUS "USE_SYSTEM_NTIRPC = ${USE_SYSTEM_NTIRPC}")
 message(STATUS "USE_DBUS = ${USE_DBUS}")
