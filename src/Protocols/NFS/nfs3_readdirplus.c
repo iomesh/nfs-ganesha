@@ -346,21 +346,18 @@ int nfs3_readdirplus(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		u_int pos_end;
 		bool_t tmp;
 
-		if (eod_met) {
-			/* If we hit end of directory, then the dirlist3 we have
-			 * encoded so far has a complete entry (we MUST have
-			 * consumed the last entry and encoded it). Now we need
-			 * to encode a FALSE to indicate no next entry.
-			 */
-			tmp = FALSE;
-			if (!xdr_bool(&tracker.xdr, &tmp)) {
-				/* Oops... */
-				LogCrit(COMPONENT_NFS_READDIR,
-					"Encode of no next entry failed.");
-				res->res_readdirplus3.status
-					= NFS3ERR_SERVERFAULT;
-				goto out_destroy;
-			}
+		/* The dirlistplus3 we have encoded so far has a complete
+		 * entry (we MUST have consumed the last entry and
+		 * encoded it). Now we need to encode a FALSE to
+		 * indicate no next entry.
+		 */
+		tmp = FALSE;
+		if (!xdr_bool(&tracker.xdr, &tmp)) {
+			/* Oops... */
+			LogCrit(COMPONENT_NFS_READDIR,
+				"Encode of no next entry failed.");
+			res->res_readdirplus3.status = NFS3ERR_SERVERFAULT;
+			goto out_destroy;
 		}
 
 		/* Serialize eod_met into the entries buffer */
@@ -512,17 +509,12 @@ fsal_errors_t nfs3_readdirplus_callback(void *opaque,
 	    !xdr_encode_entryplus3(&tracker->xdr, &ep3, attr) ||
 	    (xdr_getpos(&tracker->xdr) + BYTES_PER_XDR_UNIT)
 	    >= tracker->mem_avail) {
-		bool_t res_false = false;
-
 		/* XDR serialization of the entry failed or we ran out of room
 		 * to serialize at least a boolean after the result. */
 		cb_parms->in_result = false;
 
-		/* Reset to where we started this entry and encode a boolean
-		 * false instead (entry_follows is false).
-		 */
-		if (!xdr_setpos(&tracker->xdr, pos_start) ||
-		    !xdr_bool(&tracker->xdr, &res_false)) {
+		/* Reset to where we started this entry. */
+		if (!xdr_setpos(&tracker->xdr, pos_start)) {
 			/* Oops, what broke... */
 			LogCrit(COMPONENT_NFS_READDIR,
 				"Unexpected XDR failure processing readdir result");

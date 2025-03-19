@@ -110,7 +110,9 @@ int nfsacl_setacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		 */
 		if (!nfs_get_grace_status(false)) {
 			res->res_setacl.status = NFS3ERR_JUKEBOX;
-			rc = NFS_REQ_OK;
+			if (nfs_DropDelayErrors()) {
+				rc = NFS_REQ_DROP;
+			}
 			LogFullDebug(COMPONENT_NFSPROTO,
 					 "nfs_in_grace is true");
 			goto out;
@@ -139,8 +141,7 @@ int nfsacl_setacl(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		LogFullDebug(COMPONENT_NFSPROTO,
 			 "nfsacl_Setacl get attr failed");
 
-		rc = NFS_REQ_OK;
-		goto out;
+		goto out_fail;
 	}
 
 	/* Set the NFS return */
