@@ -1351,10 +1351,19 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 	if (dv == DUPREQ_NOCACHE || dv == DUPREQ_NOCACHE_NORES)
 		return;
 
+	drc = reqnfs->svc.rq_xprt->xp_u2;
+
 	/* Check if this entry has any duplicate requests queued against it. If
 	 * so, we will want to resubmit them and NOT delete this drc. It will
 	 * attach as primary to the next request in line.
+	 *
+	 * If partition lock of rb tree is not acquired here, nfs_dupreq_start()
+	 * may find and use an existent entry in the hash table. However, we're
+	 * removing the entry here.
 	 */
+	t = rbtx_partition_of_scalar(&drc->xt, dv->hk);
+	PTHREAD_MUTEX_lock(&t->mtx);
+
 	PTHREAD_MUTEX_lock(&dv->dre_mtx);
 
 	if (!TAILQ_EMPTY(&dv->dupes)) {
@@ -1369,12 +1378,11 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		dv->rc = rc;
 
 		PTHREAD_MUTEX_unlock(&dv->dre_mtx);
+		PTHREAD_MUTEX_unlock(&t->mtx);
 		return;
 	}
 
 	PTHREAD_MUTEX_unlock(&dv->dre_mtx);
-
-	drc = reqnfs->svc.rq_xprt->xp_u2;
 
 	LogFullDebug(COMPONENT_DUPREQ,
 		     "deleting dv=%p xid=%" PRIu32
@@ -1388,9 +1396,6 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 	--(drc->size);
 	PTHREAD_MUTEX_unlock(&drc->drc_mtx);
 
-	t = rbtx_partition_of_scalar(&drc->xt, dv->hk);
-
-	PTHREAD_MUTEX_lock(&t->mtx);
 	rbtree_x_cached_remove(&drc->xt, t, &dv->rbt_k, dv->hk);
 	PTHREAD_MUTEX_unlock(&t->mtx);
 
