@@ -91,7 +91,7 @@ NFS_CORE_PARAM {}
 
 	DRC_TCP_Cachesz(uint32, range 1 to 255, default 127)
 
-	DRC_TCP_Hiwat(uint32, range 1 to 256, default 64)
+	DRC_TCP_Hiwat(uint32, range 1 to 32767, default 512)
 
 	DRC_TCP_Recycle_Npart(uint32, range 1 to 20, default 7)
 

@@ -1164,10 +1164,10 @@ dupreq_status_t nfs_dupreq_start(nfs_request_t *reqnfs)
 			 */
 			dk->refcnt = 2;
 
-			/* add to q tail */
 			PTHREAD_MUTEX_lock(&drc->drc_mtx);
-			TAILQ_INSERT_TAIL(&drc->dupreq_q, dk, fifo_q);
+			/* count both inflight and completed entries */
 			++(drc->size);
+			/* inflight entry is not added to the dupreq_q */
 			PTHREAD_MUTEX_unlock(&drc->drc_mtx);
 
 			LogFullDebug(COMPONENT_DUPREQ,
@@ -1192,19 +1192,21 @@ no_cache:
 /**
  * @brief Completes a request in the cache
  *
- * Completes a cache insertion operation begun in nfs_dupreq_start.
+ * Completes a cache insertion operation begun in nfs_dupreq_start by
+ * marking the entry completed and adding the entry into dupreq_q.
  * The refcnt of the corresponding duplicate request entry is unchanged
  * (ie, the caller must still call nfs_dupreq_rele).
  *
  * In contrast with the prior DRC implementation, completing a request
  * in the current implementation may under normal conditions cause one
- * or more cached requests to be retired.  Requests are retired in the
- * order they were inserted.  The primary retire algorithm is a high
- * water mark, and a windowing heuristic.  One or more requests will be
- * retired if the water mark/timeout is exceeded, and if a no duplicate
- * requests have been found in the cache in a configurable window of
- * immediately preceding requests.  A timeout may supplement the water mark,
- * in future.
+ * or more cached requests to be retired. Entries can be retired only
+ * when they complete and they are retired in the order they complete.
+ *
+ * The primary retire algorithm is a high water mark, and a windowing
+ * heuristic. One or more requests will be retired if the water
+ * mark/timeout is exceeded, and if a no duplicate requests have been
+ * found in the cache in a configurable window of immediately preceding
+ * requests. A timeout may supplement the water mark, in future.
  *
  * req->rq_u1 has either a magic value, or points to a duplicate request
  * cache entry allocated in nfs_dupreq_start.
@@ -1226,6 +1228,9 @@ void nfs_dupreq_finish(nfs_request_t *reqnfs, enum nfs_req_result rc)
 
 	PTHREAD_MUTEX_lock(&dv->dre_mtx);
 
+	/* the next duplicate handles different results separately */
+	dv->rc = rc;
+
 	assert(dv->res == reqnfs->res_nfs);
 
 	/* Now see if there are any requests waiting. */
@@ -1242,7 +1247,6 @@ void nfs_dupreq_finish(nfs_request_t *reqnfs, enum nfs_req_result rc)
 	}
 
 	dv->complete = true;
-	dv->rc = rc;
 
 	PTHREAD_MUTEX_unlock(&dv->dre_mtx);
 
@@ -1255,6 +1259,9 @@ void nfs_dupreq_finish(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		     dv, dv->hin.tcp.rq_xid, drc,
 		     dupreq_state_table[dv->complete],
 		     dv->refcnt, drc->size);
+
+	/* add to the tail of complete queue */
+	TAILQ_INSERT_TAIL(&drc->dupreq_q, dv, fifo_q);
 
 	/* (all) finished requests count against retwnd */
 	drc_dec_retwnd(drc);
@@ -1348,10 +1355,19 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 	if (dv == DUPREQ_NOCACHE || dv == DUPREQ_NOCACHE_NORES)
 		return;
 
+	drc = reqnfs->svc.rq_xprt->xp_u2;
+
 	/* Check if this entry has any duplicate requests queued against it. If
 	 * so, we will want to resubmit them and NOT delete this drc. It will
 	 * attach as primary to the next request in line.
+	 *
+	 * If partition lock of rb tree is not acquired here, nfs_dupreq_start()
+	 * may find and use an existent entry in the hash table. However, we're
+	 * removing the entry here.
 	 */
+	t = rbtx_partition_of_scalar(&drc->xt, dv->hk);
+	PTHREAD_MUTEX_lock(&t->mtx);
+
 	PTHREAD_MUTEX_lock(&dv->dre_mtx);
 
 	if (!TAILQ_EMPTY(&dv->dupes)) {
@@ -1366,12 +1382,11 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		dv->rc = rc;
 
 		PTHREAD_MUTEX_unlock(&dv->dre_mtx);
+		PTHREAD_MUTEX_unlock(&t->mtx);
 		return;
 	}
 
 	PTHREAD_MUTEX_unlock(&dv->dre_mtx);
-
-	drc = reqnfs->svc.rq_xprt->xp_u2;
 
 	LogFullDebug(COMPONENT_DUPREQ,
 		     "deleting dv=%p xid=%" PRIu32
@@ -1380,30 +1395,11 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		     dupreq_state_table[dv->complete],
 		     dv->refcnt);
 
-	/* This function is called to remove this dupreq from the
-	 * hashtable/list, but it is possible that another thread
-	 * processing a different request calling nfs_dupreq_finish()
-	 * might have already deleted this dupreq.
-	 *
-	 * If this dupreq is already removed from hash table/list, do
-	 * nothing.
-	 *
-	 * req holds a ref on drc, so it should be valid here.
-	 * assert(drc == (drc_t *)reqnfs->svc.rq_xprt->xp_u2);
-	 */
 	PTHREAD_MUTEX_lock(&drc->drc_mtx);
-	if (!TAILQ_IS_ENQUEUED(dv, fifo_q)) {
-		PTHREAD_MUTEX_unlock(&drc->drc_mtx);
-		return; /* no more in the hash table/list, nothing todo */
-	}
-	TAILQ_REMOVE(&drc->dupreq_q, dv, fifo_q);
-	TAILQ_INIT_ENTRY(dv, fifo_q);
+	assert(!TAILQ_IS_ENQUEUED(dv, fifo_q));
 	--(drc->size);
 	PTHREAD_MUTEX_unlock(&drc->drc_mtx);
 
-	t = rbtx_partition_of_scalar(&drc->xt, dv->hk);
-
-	PTHREAD_MUTEX_lock(&t->mtx);
 	rbtree_x_cached_remove(&drc->xt, t, &dv->rbt_k, dv->hk);
 	PTHREAD_MUTEX_unlock(&t->mtx);
 
