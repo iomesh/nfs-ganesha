@@ -1164,9 +1164,7 @@ dupreq_status_t nfs_dupreq_start(nfs_request_t *reqnfs)
 			 */
 			dk->refcnt = 2;
 
-			/* add to q tail */
 			PTHREAD_MUTEX_lock(&drc->drc_mtx);
-			TAILQ_INSERT_TAIL(&drc->dupreq_q, dk, fifo_q);
 			++(drc->size);
 			PTHREAD_MUTEX_unlock(&drc->drc_mtx);
 
@@ -1257,6 +1255,9 @@ void nfs_dupreq_finish(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		     dv, dv->hin.tcp.rq_xid, drc,
 		     dupreq_state_table[dv->complete],
 		     dv->refcnt, drc->size);
+
+	/* add to the tail of complete queue */
+	TAILQ_INSERT_TAIL(&drc->dupreq_q, dv, fifo_q);
 
 	/* (all) finished requests count against retwnd */
 	drc_dec_retwnd(drc);
@@ -1382,24 +1383,8 @@ void nfs_dupreq_delete(nfs_request_t *reqnfs, enum nfs_req_result rc)
 		     dupreq_state_table[dv->complete],
 		     dv->refcnt);
 
-	/* This function is called to remove this dupreq from the
-	 * hashtable/list, but it is possible that another thread
-	 * processing a different request calling nfs_dupreq_finish()
-	 * might have already deleted this dupreq.
-	 *
-	 * If this dupreq is already removed from hash table/list, do
-	 * nothing.
-	 *
-	 * req holds a ref on drc, so it should be valid here.
-	 * assert(drc == (drc_t *)reqnfs->svc.rq_xprt->xp_u2);
-	 */
 	PTHREAD_MUTEX_lock(&drc->drc_mtx);
-	if (!TAILQ_IS_ENQUEUED(dv, fifo_q)) {
-		PTHREAD_MUTEX_unlock(&drc->drc_mtx);
-		return; /* no more in the hash table/list, nothing todo */
-	}
-	TAILQ_REMOVE(&drc->dupreq_q, dv, fifo_q);
-	TAILQ_INIT_ENTRY(dv, fifo_q);
+	assert(!TAILQ_IS_ENQUEUED(dv, fifo_q));
 	--(drc->size);
 	PTHREAD_MUTEX_unlock(&drc->drc_mtx);
 
