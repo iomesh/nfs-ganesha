@@ -116,7 +116,7 @@ typedef enum protos {
 /**
  * @brief Default value for core_param.drc.tcp.hiwat
  */
-#define DRC_TCP_HIWAT 64	/* 1/2(size) */
+#define DRC_TCP_HIWAT 512	/* 1/2(size) */
 
 /**
  * @brief Default value for core_param.drc.tcp.recycle_npart
