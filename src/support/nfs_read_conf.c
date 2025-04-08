@@ -205,7 +205,7 @@ static struct config_item core_params[] = {
 		       nfs_core_param, drc.tcp.size),
 	CONF_ITEM_UI32("DRC_TCP_Cachesz", 1, 255, DRC_TCP_CACHESZ,
 		       nfs_core_param, drc.tcp.cachesz),
-	CONF_ITEM_UI32("DRC_TCP_Hiwat", 1, 256, DRC_TCP_HIWAT,
+	CONF_ITEM_UI32("DRC_TCP_Hiwat", 1, 32767, DRC_TCP_HIWAT,
 		       nfs_core_param, drc.tcp.hiwat),
 	CONF_ITEM_UI32("DRC_TCP_Recycle_Npart", 1, 20, DRC_TCP_RECYCLE_NPART,
 		       nfs_core_param, drc.tcp.recycle_npart),

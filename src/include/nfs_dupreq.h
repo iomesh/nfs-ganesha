@@ -53,7 +53,15 @@ enum drc_type {
 typedef struct drc {
 	enum drc_type type;
 	struct rbtree_x xt;
-	/* Define the tail queue */
+	/* Define the tail queue, which contains only completed entries.
+	 *
+	 * Compelted entries are retired in the FIFO order. Inflight
+	 * entries keep in the table and are not retired so that retried
+	 * requests can be suspended by DRC layer and make sure that
+	 * only one of the same retried requests is dispatched into
+	 * the protocol layer and FSAL layer at the same time. Otherwise,
+	 * non-idempotence issues can easily occur.
+	 */
 	TAILQ_HEAD(drc_tailq, dupreq_entry) dupreq_q;
 	pthread_mutex_t drc_mtx;
 	uint32_t npart;

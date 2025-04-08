@@ -244,7 +244,7 @@ DRC_TCP_Cachesz(uint32, range 1 to 255, default 127)
     Number of entries in the O(1) front-end cache to a TCP Duplicate Request
     Cache.
 
-DRC_TCP_Hiwat(uint32, range 1 to 256, default 64)
+DRC_TCP_Hiwat(uint32, range 1 to 32767, default 512)
     High water mark for a TCP connection's DRC at which to start retiring
     entries if we can.
 
