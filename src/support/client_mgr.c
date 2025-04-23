@@ -112,6 +112,7 @@ static int client_ip_cmpf(const struct avltree_node *lhs,
 {
 	struct gsh_client *lk, *rk;
 
+
 	lk = avltree_container_of(lhs, struct gsh_client, node_k);
 	rk = avltree_container_of(rhs, struct gsh_client, node_k);
 

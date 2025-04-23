@@ -46,6 +46,7 @@ SET(MainServices_STAT_SRCS
    nfs_lib.c
    nfs_reaper_thread.c
    ../support/client_mgr.c
+   ../support/service_ip_mgr.c
 )
 
 if(USE_9P)
