@@ -251,6 +251,34 @@ bool sprint_sockip(sockaddr_t *addr, char *buf, int len)
 	return inet_ntop(addr->ss_family, socket_addr(addr), buf, len) != NULL;
 }
 
+static inline in_addr_t get_ip_addr(sockaddr_t *addr)
+{
+	in_addr_t val = 0;
+	struct in6_addr *in6;
+	uint32_t tmp;
+
+	if (addr == NULL)
+		return val;
+
+	switch (addr->ss_family) {
+	case AF_INET6:
+		{
+			in6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
+			if (IN6_IS_ADDR_V4MAPPED(in6)) {
+				memcpy(&tmp, &in6->s6_addr[12], sizeof(tmp));
+				val = ntohl(tmp);
+			}
+		}
+		break;
+	case AF_INET:
+		val = ntohl(((struct sockaddr_in *)addr)->sin_addr.s_addr);
+		break;
+	default:
+		break;
+	}
+	return val;
+}
+
 const char *xprt_type_to_str(xprt_type_t);
 
 int cmp_sockaddr(sockaddr_t *, sockaddr_t *, bool);
