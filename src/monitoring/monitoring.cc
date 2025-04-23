@@ -295,7 +295,7 @@ static SimpleMap<in_addr_t, std::string> ip2str([](const in_addr_t& ip_addr){
   char addr_str[INET_ADDRSTRLEN];
   const char *ip_str = inet_ntop(AF_INET, &s_addr, addr_str, INET_ADDRSTRLEN);
   if (unlikely(ip_str == NULL))
-    return std::string("");
+    return std::string("<unknown>");
   return std::string(ip_str);
 });
 
@@ -320,7 +320,7 @@ static void observeNfsRequest(const char *operation,
                               const char *statusLabel,
                               const export_id_t export_id,
                               const char *fullpath,
-                              const in_addr_t server_addr,
+                              const in_addr_t service_ip,
                               const char *client_ip) {
   const int64_t latency_ms = request_time / NS_PER_MSEC;
   std::string operationLowerCase = std::string(operation);
@@ -335,7 +335,7 @@ static void observeNfsRequest(const char *operation,
         .Add({{kClient, client},
               {kOperation, operationLowerCase}})
         .Increment();
-    std::string server_ip = ip2str.GetOrInsert(server_addr);
+    std::string server_ip = ip2str.GetOrInsert(service_ip);
     if (export_id != 0 && fullpath != NULL && strlen(fullpath) > 1
         && !server_ip.empty()) {
       metrics->lastClientUpdate
@@ -407,7 +407,7 @@ void monitoring_nfs3_request(const uint32_t proc,
                              const nfsstat3 status,
                              const export_id_t export_id,
                              const char *fullpath,
-                             const in_addr_t server_addr,
+                             const in_addr_t service_ip,
                              const char *client_ip) {
   const char *version = "NFSv3";
   const char *operation = nfsproc3_to_str(proc);
@@ -416,7 +416,7 @@ void monitoring_nfs3_request(const uint32_t proc,
     nfs_req_result_to_str(result);
 
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-          fullpath, server_addr, client_ip);
+          fullpath, service_ip, client_ip);
 }
 
 static const char *nfsversion4_to_str(uint32_t minorversion) {
@@ -438,13 +438,13 @@ void monitoring_nfs4_request(const uint32_t op,
                              const nfsstat4 status,
                              const export_id_t export_id,
                              const char *fullpath,
-                             const in_addr_t server_addr,
+                             const in_addr_t service_ip,
                              const char *client_ip) {
   const char *operation = nfsop4_to_str(op);
   const char *version = nfsversion4_to_str(minor_version);
   const char *statusLabel = nfsstat4_to_str(status);
   observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-                    fullpath, server_addr, client_ip);
+                    fullpath, service_ip, client_ip);
 }
 
 void monitoring_nfs_io(const size_t bytes_requested,
@@ -540,6 +540,12 @@ void monitoring_rpc_completed() {
 
 void monitoring_rpcs_in_flight(const uint64_t value) {
   metrics->rpcsInFlight.Add({}).Set(value);
+}
+
+void monitoring_service_ip_rpcs_in_flight(const in_addr_t service_ipaddr,
+					  const uint64_t value) {
+  std::string service_ip = ip2str.GetOrInsert(service_ipaddr);
+  metrics->rpcsInFlight.Add({{kServer, service_ip}}).Set(value);
 }
 
 }  // extern "C"

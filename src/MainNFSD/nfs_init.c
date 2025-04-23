@@ -65,6 +65,7 @@
 #include "idmapper.h"
 #include "delayed_exec.h"
 #include "client_mgr.h"
+#include "service_ip_mgr.h"
 #include "export_mgr.h"
 #ifdef USE_CAPS
 #include <sys/capability.h>	/* For capget/capset */
@@ -414,6 +415,7 @@ int nfs_set_param_from_conf(config_file_t parse_tree,
 	core_pkginit();
 	client_pkginit();
 	export_pkginit();
+	service_ip_pkginit();
 	server_pkginit();
 
 	/* Core parameters */
