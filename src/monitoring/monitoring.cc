@@ -58,6 +58,7 @@ static const std::initializer_list<double> latencyBuckets =
  3787, 5681, 8522, 12783};
 
 static const char kClient[] = "client";
+static const char kServer[] = "server_ip";
 static const char kExport[] = "export";
 static const char kOperation[] = "operation";
 static const char kStatus[] = "status";
@@ -283,6 +284,16 @@ static std::string GetExportLabel(export_id_t export_id) {
   return exportLabels.GetOrInsert(export_id);
 }
 
+static SimpleMap<in_addr_t, std::string> ip2str([](const in_addr_t& ip_addr){
+  struct in_addr s_addr;
+  s_addr.s_addr = htonl(ip_addr);
+  char addr_str[INET_ADDRSTRLEN];
+  const char *ip_str = inet_ntop(AF_INET, &s_addr, addr_str, INET_ADDRSTRLEN);
+  if (unlikely(ip_str == NULL))
+    return std::string("<unknown>");
+  return std::string(ip_str);
+});
+
 std::unique_ptr<prometheus::Exposer> exposer;
 std::shared_ptr<prometheus::Registry> registry;
 
@@ -497,6 +508,12 @@ void monitoring_rpc_completed() {
 
 void monitoring_rpcs_in_flight(const uint64_t value) {
   metrics->rpcsInFlight.Add({}).Set(value);
+}
+
+void monitoring_service_ip_rpcs_in_flight(const in_addr_t service_ipaddr,
+					  const uint64_t value) {
+  std::string service_ip = ip2str.GetOrInsert(service_ipaddr);
+  metrics->rpcsInFlight.Add({{kServer, service_ip}}).Set(value);
 }
 
 }  // extern "C"

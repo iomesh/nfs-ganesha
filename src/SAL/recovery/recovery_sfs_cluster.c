@@ -7,6 +7,7 @@
 #include "recovery_sfs.h"
 #include <ctype.h>
 #include "nfs_init.h"
+#include "service_ip_mgr.h"
 
 #include "sfs_recovery_backend.h"
 #include "sfs_client.h"
@@ -198,12 +199,6 @@ static int sfs_start_grace(const char *vip, int event) {
 	return -nfs_start_grace(&gsp);
 }
 
-static void write_log(const char *file, int level, uint32_t line, const char *target, const char *message)
-{
-	//TODO dynamic loglevel
-	DisplayLogComponentLevel(COMPONENT_RECOVERY_BACKEND, file, line, target, level, "%s", message);
-}
-
 static int sfs_cluster_recovery_init(void)
 {
 	if (sfs_cluster_param.sessionid == 0) {
@@ -213,11 +208,12 @@ static int sfs_cluster_recovery_init(void)
 
 	sessionid = sfs_cluster_param.sessionid;
 
-	sfs_recovery_log_init(write_log);
+	sfs_recovery_log_init();
 
 	struct NFSServerCallbacks nfs_cbs;
 	nfs_cbs.start_grace_cb = sfs_start_grace;
 	nfs_cbs.get_status_cb = get_ganesha_status;
+	nfs_cbs.get_vip_inflight_req_cb = get_gsh_service_ip_inflight_count;
 	int ret = sfs_recovery_backend_init(sessionid, nfs_cbs);
 
 	LogEvent(COMPONENT_INIT,

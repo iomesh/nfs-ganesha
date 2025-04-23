@@ -91,6 +91,8 @@ void monitoring_mdcache_cache_miss(const char *operation,
 void monitoring_rpc_received(void);
 void monitoring_rpc_completed(void);
 void monitoring_rpcs_in_flight(const uint64_t value);
+void monitoring_service_ip_rpcs_in_flight(const in_addr_t service_ipaddr,
+					  const uint64_t value);
 
 #ifdef __cplusplus
 }
