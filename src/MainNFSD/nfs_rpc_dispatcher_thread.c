@@ -63,6 +63,8 @@
 #include "nfs_dupreq.h"
 #include "nfs_file_handle.h"
 
+#include "service_ip_mgr.h"
+
 #ifdef USE_LTTNG
 #include "gsh_lttng/nfs_rpc.h"
 #endif
@@ -1552,7 +1554,7 @@ static struct svc_req *alloc_nfs_request(SVCXPRT *xprt, XDR *xdrs)
 		 xprt, xprt->xp_fd, xdrs);
 
 	(void) atomic_inc_uint64_t(&nfs_health_.enqueued_reqs);
-
+	inc_gsh_service_ip_inflight_count(svc_getrpclocal(xprt));
 #ifdef USE_MONITORING
 	monitoring_rpc_received();
 	monitoring_rpcs_in_flight(
@@ -1618,8 +1620,10 @@ static void free_nfs_request(struct svc_req *req, enum xprt_stat stat)
 	SVC_RELEASE(xprt, SVC_REF_FLAG_NONE);
 
 	(void) atomic_inc_uint64_t(&nfs_health_.dequeued_reqs);
-
+	dec_gsh_service_ip_inflight_count(svc_getrpclocal(xprt));
 #ifdef USE_MONITORING
 	monitoring_rpc_completed();
+	monitoring_rpcs_in_flight(
+		nfs_health_.enqueued_reqs - nfs_health_.dequeued_reqs);
 #endif /* USE_MONITORING*/
 }
