@@ -254,16 +254,19 @@ bool sprint_sockip(sockaddr_t *addr, char *buf, int len)
 static inline in_addr_t get_ip_addr(sockaddr_t *addr)
 {
 	in_addr_t val = 0;
-
+	struct in6_addr *in6;
+	uint32_t tmp;
 	if (addr == NULL)
 		return val;
 
 	switch (addr->ss_family) {
 	case AF_INET6:
 		{
-			void *ab = &(((struct sockaddr_in6 *)addr)->
-					sin6_addr.s6_addr[12]);
-			val = ntohl(*(uint32_t *) ab);
+			in6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
+			if (IN6_IS_ADDR_V4MAPPED(in6)) {
+				memcpy(&tmp, &in6->s6_addr[12], sizeof(tmp));
+				val = ntohl(tmp);
+			}
 		}
 		break;
 	case AF_INET:
@@ -272,7 +275,6 @@ static inline in_addr_t get_ip_addr(sockaddr_t *addr)
 	default:
 		break;
 	}
-
 	return val;
 }
 
