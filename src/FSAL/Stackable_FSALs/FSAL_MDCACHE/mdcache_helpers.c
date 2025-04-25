@@ -1774,6 +1774,48 @@ mdcache_readdir_uncached(mdcache_entry_t *directory, fsal_cookie_t *whence, size
 	return status;
 }
 
+static enum fsal_dir_result
+mdc_readdir_uncached_light_cb(const char *name, struct fsal_obj_handle *sub_handle,
+			struct fsal_attrlist *attrs, void *dir_state,
+			fsal_cookie_t cookie)
+{
+	struct mdcache_populate_cb_state *state = dir_state;
+	enum fsal_dir_result rv;
+
+	/* Call up the stack.  Do a supercall */
+	supercall_raw(state->export,
+			rv = state->cb(name, sub_handle, attrs, state->dir_state, cookie));
+
+	return rv;
+}
+
+fsal_status_t
+mdcache_readdir_uncached_light(mdcache_entry_t *directory, fsal_cookie_t *whence, size_t sz,
+			 void *dir_state, fsal_readdir_cb cb,
+			 attrmask_t attrmask, bool *eod_met)
+{
+	fsal_status_t status = {0, 0};
+	fsal_status_t readdir_status = {0, 0};
+	struct mdcache_populate_cb_state state;
+
+	state.export = mdc_cur_export();
+	state.dir = directory;
+	state.status = &status;
+	state.cb = cb;
+	state.dir_state = dir_state;
+
+	subcall(
+		readdir_status = directory->sub_handle->obj_ops->readdir(
+			directory->sub_handle, whence, sz, &state,
+			mdc_readdir_uncached_light_cb, attrmask, eod_met)
+	       );
+
+	if (FSAL_IS_ERROR(readdir_status))
+		return readdir_status;
+
+	return status;
+}
+
 /**
  * @brief Place a new dirent from create, lookup, or rename into a chunk if
  * possible, otherwise place as a detached dirent.
