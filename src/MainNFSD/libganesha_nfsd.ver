@@ -173,6 +173,7 @@
   nfs_init_init;
   nfs_init_wait;
   nfs_init_wait_timeout;
+  check_nfs_init_complete;
   nfs_libmain;
   nfs_param;
   nfs_pidfile_path;
