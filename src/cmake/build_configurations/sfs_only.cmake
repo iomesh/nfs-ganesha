@@ -26,4 +26,7 @@ set(USE_9P OFF)
 set(USE_DBUS OFF)
 set(ENABLE_SFS ON)
 
+set(USE_RQUOTA OFF)
+set(USE_NLM OFF)
+
 message(STATUS "Building sfs_only configuration")
