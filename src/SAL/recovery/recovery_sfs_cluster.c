@@ -179,8 +179,13 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 }
 
 static int get_ganesha_status() {
-	// 0 denotes Initializing; 1 denotes Running.
-	return check_nfs_init_complete();
+	if (!check_nfs_init_complete()) {
+		return 0; // Initializing
+	} else if (nfs_health()) {
+		return 1; // Running
+	} else {
+		return 2; // Hung
+	}
 }
 
 static int sfs_start_grace(const char *vip, int event) {
