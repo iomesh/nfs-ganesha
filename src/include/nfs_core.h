@@ -102,6 +102,7 @@ struct _nfs_health {
 };
 
 extern struct _nfs_health nfs_health_;
+// False if nfs server is hung, true if healthy
 bool nfs_health(void);
 
 /* ServerEpoch is ServerBootTime unless overridden by -E command line option */
