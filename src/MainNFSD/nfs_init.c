@@ -1113,25 +1113,28 @@ int nfs_init_wait_timeout(int timeout)
 bool nfs_health(void)
 {
 	uint64_t newenq, newdeq;
-	uint64_t dequeue_diff, enqueue_diff;
-	bool healthy;
+	uint64_t dequeue_diff;
+	bool high_inflight;
+	bool hung;
 
-	newenq = nfs_health_.enqueued_reqs;
 	newdeq = nfs_health_.dequeued_reqs;
-	enqueue_diff = newenq - healthstats.enqueued_reqs;
+	newenq = nfs_health_.enqueued_reqs;
 	dequeue_diff = newdeq - healthstats.dequeued_reqs;
 
-	/* Consider healthy and making progress if we have dequeued some
-	 * requests or there is one or less to dequeue.  Don't check
-	 * enqueue_diff == 0 here, as there will be spurious warnings during
-	 * times of low traffic, when an enqueue happens to coincide with the
-	 * heartbeat firing.
+	/* Consider it is hung if we have NOT dequeued any
+	 * requests even though there are many inflight requests
+	 *
+	 * There are default maximum 200 threads to handle nfs requests,
+	 * so if we have more than 128 requests inflight, it is likely
+	 * that the server is hung.
 	 */
-	healthy = dequeue_diff > 0 || enqueue_diff <= 1;
+	high_inflight = healthstats.dequeued_reqs + 128
+					< healthstats.enqueued_reqs;
+	hung = (dequeue_diff == 0 && high_inflight);
 
-	if (!healthy) {
-		LogWarn(COMPONENT_DBUS,
-			"Health status is unhealthy. "
+	if (hung) {
+		LogWarn(COMPONENT_DISPATCH,
+			"Health status is hung. "
 			"enq new: %" PRIu64 ", old: %" PRIu64 "; "
 			"deq new: %" PRIu64 ", old: %" PRIu64,
 			newenq, healthstats.enqueued_reqs,
@@ -1141,5 +1144,5 @@ bool nfs_health(void)
 	healthstats.enqueued_reqs = newenq;
 	healthstats.dequeued_reqs = newdeq;
 
-	return healthy;
+	return !hung;
 }
