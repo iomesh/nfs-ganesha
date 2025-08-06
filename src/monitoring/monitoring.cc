@@ -59,8 +59,8 @@ static const std::initializer_list<double> latencyBuckets =
 
 static const char kClient[] = "client_ip";
 static const char kServer[] = "server_ip";
-static const char kExport[] = "export";  // export id in Export Block, namespace id in SFS
-static const char kExportName[] = "export_name"; // the path in Export Block, namespace name in SFS
+static const char kExport[] = "export";  // export id in Export Block
+static const char kExportName[] = "export_name"; // the path in Export Block
 static const char kOperation[] = "operation";
 static const char kStatus[] = "status";
 static const char kVersion[] = "version";  // NFSv3, NFSv4..
@@ -341,6 +341,7 @@ static void observeNfsRequest(const char *operation,
       metrics->lastClientUpdate
           .Add({{kClient, client},
                 {kServer, server_ip},
+                {kExport, std::to_string(export_id)},
                 {kExportName, fullpath + 1}, // skip the beginning '/'
                 {kVersion, version}})
           .Set(epoch);
