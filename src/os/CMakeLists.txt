@@ -39,9 +39,14 @@ endif(DARWIN)
 
 if(LINUX)
   SET(gos_STAT_SRCS
-      linux/acl.c
       linux/subr.c
   )
+  if(ENABLE_VFS_POSIX_ACL)
+    set(gos_STAT_SRCS
+      ${gos_STAT_SRCS}
+      linux/acl.c
+    )
+  endif(ENABLE_VFS_POSIX_ACL)
 endif(LINUX)
 
 add_library(gos OBJECT ${gos_STAT_SRCS})

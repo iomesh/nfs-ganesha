@@ -26,4 +26,9 @@ set(_MSPAC_SUPPORT OFF)
 set(USE_9P OFF)
 set(USE_DBUS OFF)
 
+set(USE_NLM OFF)
+set(USE_RQUOTA OFF)
+set(USE_NFSACL3 OFF)
+set(ENABLE_VFS_POSIX_ACL OFF)
+
 message(STATUS "Building vfs_only configuration")
