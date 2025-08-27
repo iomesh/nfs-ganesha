@@ -28,5 +28,7 @@ set(ENABLE_SFS ON)
 
 set(USE_RQUOTA OFF)
 set(USE_NLM OFF)
+set(USE_NFSACL3 OFF)
+set(ENABLE_VFS_POSIX_ACL OFF)
 
 message(STATUS "Building sfs_only configuration")
