@@ -74,6 +74,13 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 
 	if (!nfs41_Session_Get_Pointer(arg_DESTROY_SESSION4->dsa_sessionid,
 				       &session)) {
+		if (isDebug(COMPONENT_SESSIONS)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, arg_DESTROY_SESSION4->dsa_sessionid);
+			LogDebug(COMPONENT_SESSIONS, "session: %s not found", str);
+		}
 		res_DESTROY_SESSION4->dsr_status = NFS4ERR_BADSESSION;
 		return NFS_REQ_ERROR;
 	}
@@ -82,16 +89,39 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 	 * with the session being destroyed
 	 */
 	if (!check_session_conn(session, data, false)) {
-		res_DESTROY_SESSION4->dsr_status =
-		    NFS4ERR_CONN_NOT_BOUND_TO_SESSION;
+		if (isDebug(COMPONENT_SESSIONS)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, session->session_id);
+			LogDebug(COMPONENT_SESSIONS, "session (%p): conn not bound %s", session, str);
+		}
+		res_DESTROY_SESSION4->dsr_status = NFS4ERR_CONN_NOT_BOUND_TO_SESSION;
 		dec_session_ref(session);
 		return NFS_REQ_ERROR;
 	}
 
-	if (!nfs41_Session_Del(arg_DESTROY_SESSION4->dsa_sessionid))
+	if (!nfs41_Session_Del(arg_DESTROY_SESSION4->dsa_sessionid)){
+		if (isDebug(COMPONENT_SESSIONS)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, session->session_id);
+			LogDebug(COMPONENT_SESSIONS, "session (%p): failed to delete %s", session, str);
+		}
 		res_DESTROY_SESSION4->dsr_status = NFS4ERR_BADSESSION;
-	else
+	}
+	else{
+		if (isDebug(COMPONENT_SESSIONS)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, session->session_id);
+			LogDebug(COMPONENT_SESSIONS, "session (%p): successfully delete %s", session, str);
+		}
+
 		res_DESTROY_SESSION4->dsr_status = NFS4_OK;
+	}
 
 	/* Release ref taken in get_pointer */
 
