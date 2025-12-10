@@ -514,7 +514,7 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 			struct display_buffer dspbuf = {sizeof(str), str, str};
 
 			display_client_id_rec(&dspbuf, conf);
-			LogDebug(component, "Confirmed %s", str);
+			LogFullDebug(component, "Confirmed %s", str);
 		}
 	}
 	conf->cid_create_session_sequence++;
@@ -553,7 +553,7 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		char str[LOG_BUFF_LEN] = "\0";
 		struct display_buffer dspbuf = {sizeof(str), str, str};
 
-		display_session(&dspbuf, nfs41_session);
+		display_session_id(&dspbuf, nfs41_session->session_id);
 
 		LogDebug(component,
 			 "session (%p): successfully create session %s csa_flags 0x%X csr_flags 0x%X, client_id=%s",
