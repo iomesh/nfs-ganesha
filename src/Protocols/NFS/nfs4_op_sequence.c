@@ -172,7 +172,7 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	/* session->refcount +1 */
 
-	LogDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
+	LogFullDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
 
 	display_clientid(&clientid_dspbuf, session->clientid_record->cid_clientid);
 
