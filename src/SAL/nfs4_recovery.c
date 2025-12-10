@@ -663,7 +663,7 @@ static bool check_clid(nfs_client_id_t *clientid, clid_entry_t *clid_ent)
 	bool ret = false;
 
 
-	LogDebug(COMPONENT_CLIENTID, "compare %s to %s",
+	LogFullDebug(COMPONENT_CLIENTID, "compare %s to %s",
 		 clientid->cid_recov_tag, clid_ent->cl_name);
 
 	if (clientid->cid_recov_tag &&
@@ -687,7 +687,7 @@ void  nfs4_chk_clid_impl(nfs_client_id_t *clientid, clid_entry_t **clid_ent_arg)
 	clid_entry_t *clid_ent;
 	*clid_ent_arg = NULL;
 
-	LogDebug(COMPONENT_CLIENTID, "chk for %" PRIu64,
+	LogFullDebug(COMPONENT_CLIENTID, "chk for %" PRIu64,
 		 clientid->cid_clientid);
 
 	/* If there were no clients at time of restart, we're done */
