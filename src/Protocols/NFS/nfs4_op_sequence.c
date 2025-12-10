@@ -154,24 +154,35 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	if (!nfs41_Session_Get_Pointer(arg_SEQUENCE4->sa_sessionid, &session)) {
 		res_SEQUENCE4->sr_status = NFS4ERR_BADSESSION;
-		LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-			    "SEQUENCE returning status %s",
-			    nfsstat4_to_str(res_SEQUENCE4->sr_status));
+
+		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, arg_SEQUENCE4->sa_sessionid);
+			LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
+					"session (%s): not found", str);
+		}
 
 		return NFS_REQ_ERROR;
 	}
 
 	/* session->refcount +1 */
 
-	LogDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
+	LogFullDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
 
 	/* Check if lease is expired and reserve it */
 	if (!reserve_lease_or_expire(session->clientid_record, false)) {
 		dec_session_ref(session);
 		res_SEQUENCE4->sr_status = NFS4ERR_EXPIRED;
-		LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-			    "SEQUENCE returning status %s",
-			    nfsstat4_to_str(res_SEQUENCE4->sr_status));
+		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
+			char str[LOG_BUFF_LEN] = "\0";
+			struct display_buffer dspbuf = {sizeof(str), str, str};
+
+			display_session_id(&dspbuf, arg_SEQUENCE4->sa_sessionid);
+			LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
+					"session (%s): lease expired", str);
+		}
 		return NFS_REQ_ERROR;
 	}
 
