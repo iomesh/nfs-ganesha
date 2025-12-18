@@ -714,6 +714,8 @@ int nfs_rpc_create_chan_v41(SVCXPRT *xprt, nfs41_session_t *session,
 	int code = 0;
 	bool authed = false;
 
+	return EINVAL;
+
 	PTHREAD_MUTEX_lock(&chan->chan_mtx);
 
 	if (chan->clnt) {
