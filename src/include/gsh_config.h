@@ -606,6 +606,8 @@ typedef struct nfs_version4_parameter {
 	bool enforce_utf8_vld;
 	/** Max number of Client IDs allowed on the system */
 	uint32_t max_client_ids;
+	/** allow create channel by create seesion operation **/
+	bool allow_back_channel;
 } nfs_version4_parameter_t;
 
 /** @} */
