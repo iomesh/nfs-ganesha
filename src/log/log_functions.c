@@ -443,7 +443,8 @@ static void SetLevelDebug(int level_to_set)
 
 uint32_t rpc_debug_flags = TIRPC_DEBUG_FLAG_ERROR |
 			   TIRPC_DEBUG_FLAG_WARN |
-			   TIRPC_DEBUG_FLAG_EVENT;
+			   TIRPC_DEBUG_FLAG_EVENT |
+			   TIRPC_DEBUG_FLAG_REFCNT;
 
 static void SetNTIRPCLogLevel(int level_to_set)
 {
@@ -466,7 +467,8 @@ static void SetNTIRPCLogLevel(int level_to_set)
 	case NIV_INFO:
 		ntirpc_pp.debug_flags = TIRPC_DEBUG_FLAG_ERROR |
 					TIRPC_DEBUG_FLAG_WARN |
-					TIRPC_DEBUG_FLAG_EVENT;
+					TIRPC_DEBUG_FLAG_EVENT |
+					TIRPC_DEBUG_FLAG_REFCNT;
 		break;
 	case NIV_DEBUG:
 	case NIV_MID_DEBUG:
@@ -2541,14 +2543,14 @@ static int log_conf_commit(void *node, void *link_mem, void *self_struct,
 		/* Apply any changes to Default_Log_Level or COMPONENTS */
 		apply_logger_config_levels(logger);
 
-		if (ntirpc_pp.debug_flags != logger->rpc_debug_flags)
-			LogChanges("Changing custom RPC_Debug_Flags from %"
-				   PRIx32" to %"PRIx32,
-				   rpc_debug_flags,
-				   logger->rpc_debug_flags);
+		// if (ntirpc_pp.debug_flags != logger->rpc_debug_flags)
+		// 	LogChanges("Changing custom RPC_Debug_Flags from %"
+		// 		   PRIx32" to %"PRIx32,
+		// 		   rpc_debug_flags,
+		// 		   logger->rpc_debug_flags);
 
 		disp_utc_timestamp = logger->disp_utc_timestamp;
-		rpc_debug_flags = logger->rpc_debug_flags;
+		// rpc_debug_flags = logger->rpc_debug_flags;
 		SetNTIRPCLogLevel(component_log_level[COMPONENT_TIRPC]);
 	} else {
 		if (logger->logfields != NULL) {

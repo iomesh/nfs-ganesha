@@ -556,8 +556,8 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		display_session_id(&dspbuf, nfs41_session->session_id);
 
 		LogDebug(component,
-			 "session %p, successful create session %s csa_flags 0x%X csr_flags 0x%X",
-			  nfs41_session, str, arg_CREATE_SESSION4->csa_flags,
+			 "session %p, xprt %p, successful create session %s csa_flags 0x%X csr_flags 0x%X",
+			  nfs41_session, data->req->rq_xprt, str, arg_CREATE_SESSION4->csa_flags,
 			  res_CREATE_SESSION4ok->csr_flags);
 	}
 

@@ -225,7 +225,7 @@ static struct config_item core_params[] = {
 		       nfs_core_param, drc.udp.checksum),
 	CONF_ITEM_UI32("RPC_Max_Connections", 1, 1000000, 1024,
 		       nfs_core_param, rpc.max_connections),
-	CONF_ITEM_UI32("RPC_Idle_Timeout_S", 0, 60*60, 300,
+	CONF_ITEM_UI32("RPC_Idle_Timeout_S", 0, 60*60, 30,
 		       nfs_core_param, rpc.idle_timeout_s),
 	CONF_ITEM_UI32("MaxRPCSendBufferSize", 1, 1048576*9,
 		       NFS_DEFAULT_SEND_BUFFER_SIZE,
