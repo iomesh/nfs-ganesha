@@ -303,7 +303,7 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	res_SEQUENCE4->SEQUENCE4res_u.sr_resok4.sr_status_flags = 0;
 
-	if (nfs_rpc_get_chan(session->clientid_record, 0) == NULL) {
+	if (!nfs_rpc_check_chan(session->clientid_record, 0)) {
 		res_SEQUENCE4->SEQUENCE4res_u.sr_resok4.sr_status_flags |=
 		    SEQ4_STATUS_CB_PATH_DOWN;
 	}
