@@ -112,6 +112,7 @@ static inline void set_cb_chan_down(struct nfs_client_id_t *clid, bool down)
 
 rpc_call_channel_t *nfs_rpc_get_chan(nfs_client_id_t *pclientid,
 				     uint32_t flags);
+bool nfs_rpc_check_chan(nfs_client_id_t *pclientid, uint32_t flags);
 
 void nfs_rpc_cb_pkginit(void);
 void nfs_rpc_cb_pkgshutdown(void);

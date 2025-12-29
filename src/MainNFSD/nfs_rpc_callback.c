@@ -858,6 +858,41 @@ rpc_call_channel_t *nfs_rpc_get_chan(nfs_client_id_t *clientid, uint32_t flags)
 	return chan;
 }
 
+bool nfs_rpc_check_chan(nfs_client_id_t *clientid, uint32_t flags)
+{
+	rpc_call_channel_t *chan;
+	struct glist_head *glist;
+	nfs41_session_t *session;
+
+	if (clientid->cid_minorversion == 0) {
+		chan = &clientid->cid_cb.v40.cb_chan;
+		if (!chan->clnt) {
+			if (nfs_rpc_create_chan_v40(clientid, flags)) {
+				chan = NULL;
+			}
+		}
+		return chan != NULL;
+	}
+
+	if (!nfs_param.nfsv4_param.allow_back_channel) {
+		return true;
+	}
+
+	/* Get the first working back channel we have */
+	chan = NULL;
+	pthread_mutex_lock(&clientid->cid_mutex);
+	glist_for_each(glist, &clientid->cid_cb.v41.cb_session_list) {
+		session = glist_entry(glist, nfs41_session_t, session_link);
+		if (atomic_fetch_uint32_t(&session->flags) & session_bc_up) {
+			chan = &session->cb_chan;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&clientid->cid_mutex);
+
+	return chan != NULL;
+}
+
 /**
  * @brief Dispose of a channel
  *
