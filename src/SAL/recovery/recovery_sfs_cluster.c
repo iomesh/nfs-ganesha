@@ -170,7 +170,7 @@ static char *sfs_cluster_create_val(nfs_client_id_t *clientid, size_t *size)
 	strncpy(val + total_len, str_server_addr, str_server_addr_len);
 	val[lsize - 1] = '\0';
 
-	LogDebug(COMPONENT_CLIENTID, "Created client name [%s]", val);
+	LogFullDebug(COMPONENT_CLIENTID, "Created client name [%s]", val);
 
 	if (size)
 		*size = lsize;
@@ -269,32 +269,47 @@ static void sfs_cluster_add_clid(nfs_client_id_t *clientid)
 	char *recov_tag;
 	int ret;
 
+	/* Display buffer for clientid4 */
+	char str_clientid4[DISPLAY_CLIENTID_SIZE];
+	struct display_buffer dspbuf_clientid4 = {sizeof(str_clientid4), str_clientid4, str_clientid4};
+	display_clientid(&dspbuf_clientid4, clientid->cid_clientid);
+
 	// Serialized client identification.
 	recov_tag = sfs_cluster_create_val(clientid, NULL);
 
-	ret = sfs_recovery_add_clid(clientid->cid_clientid,
-		clientid->cid_server_addr, (const char*)recov_tag);
-
+	ret = sfs_recovery_add_clid(clientid->cid_clientid, clientid->cid_server_addr, (const char*)recov_tag);
 	if (ret < 0) {
-		LogFatal(COMPONENT_CLIENTID, "Failed to add clid %lu",
-			 clientid->cid_clientid);
+		LogFatal(COMPONENT_CLIENTID, "Failed to add client id [%lu] [%s]", clientid->cid_clientid, str_clientid4);
 		gsh_free(recov_tag);
-	} else {
-		clientid->cid_recov_tag = recov_tag;
-		LogDebug(COMPONENT_CLIENTID, "cid_clientid: [%ld] cid_recov_tag: [%s]", clientid->cid_clientid, clientid->cid_recov_tag);
+		goto end;
 	}
+
+	clientid->cid_recov_tag = recov_tag;
+	LogDebug(COMPONENT_CLIENTID, "Successfully add client id [%lu] [%s] recov_tag [%s]",
+			clientid->cid_clientid, str_clientid4, clientid->cid_recov_tag);
+
+end:
+	return;
 }
 
 static void sfs_cluster_rm_clid(nfs_client_id_t *clientid)
 {
-	LogDebug(COMPONENT_CLIENTID, "cid_clientid: [%ld] cid_recov_tag: [%s]", clientid->cid_clientid, clientid->cid_recov_tag);
+	/* Display buffer for clientid4 */
+	char str_clientid4[DISPLAY_CLIENTID_SIZE];
+	struct display_buffer dspbuf_clientid4 = {sizeof(str_clientid4), str_clientid4, str_clientid4};
+	display_clientid(&dspbuf_clientid4, clientid->cid_clientid);
+
 	// rust will panic if rm clid failed
 	sfs_recovery_rm_clid(clientid->cid_clientid, clientid->cid_server_addr);
+
+	LogDebug(COMPONENT_CLIENTID, "Successfully remove client id [%lu] [%s] recov_tag [%s]",
+			clientid->cid_clientid, str_clientid4, clientid->cid_recov_tag);
 
 	char *recov_tag = clientid->cid_recov_tag;
 	clientid->cid_recov_tag = NULL;
 	if (recov_tag != NULL)
 		gsh_free((void *)recov_tag);
+
 }
 
 static void sfs_cluster_add_revoke_fh(nfs_client_id_t *delr_clid, nfs_fh4 *delr_handle)
