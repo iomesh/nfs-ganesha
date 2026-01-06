@@ -1283,8 +1283,8 @@ int display_clientid(struct display_buffer *dspbuf, clientid4 clientid)
 	if (b_left <= 0)
 		return b_left;
 
-	return display_printf(dspbuf, "Unique=0x%08"PRIx32
-			" Counter=0x%08"PRIx32, unique, counter);
+	return display_printf(dspbuf, "0x%08"PRIx32
+			":0x%08"PRIx32, unique, counter);
 }
 
 /**
