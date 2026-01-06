@@ -144,6 +144,12 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 	nfs41_session_t *session;
 	nfs41_session_slot_t *slot;
 
+	char clientid_str[DISPLAY_CLIENTID_SIZE];
+	struct display_buffer clientid_dspbuf = {sizeof(clientid_str), clientid_str, clientid_str};
+
+	char sessionid_str[LOG_BUFF_LEN];
+	struct display_buffer sessionid_dspbuf = {sizeof(sessionid_str), sessionid_str, sessionid_str};
+
 	resp->resop = NFS4_OP_SEQUENCE;
 	res_SEQUENCE4->sr_status = NFS4_OK;
 
@@ -156,12 +162,9 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 		res_SEQUENCE4->sr_status = NFS4ERR_BADSESSION;
 
 		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
-			display_session_id(&dspbuf, arg_SEQUENCE4->sa_sessionid);
+			display_session_id(&sessionid_dspbuf, arg_SEQUENCE4->sa_sessionid);
 			LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-					"session (%s): not found", str);
+					"session (%s): not found", sessionid_str);
 		}
 
 		return NFS_REQ_ERROR;
@@ -171,17 +174,17 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	LogFullDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
 
+	display_clientid(&clientid_dspbuf, session->clientid_record->cid_clientid);
+
 	/* Check if lease is expired and reserve it */
 	if (!reserve_lease_or_expire(session->clientid_record, false)) {
 		dec_session_ref(session);
 		res_SEQUENCE4->sr_status = NFS4ERR_EXPIRED;
 		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
-			display_session_id(&dspbuf, arg_SEQUENCE4->sa_sessionid);
+			display_session_id(&sessionid_dspbuf, arg_SEQUENCE4->sa_sessionid);
 			LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-					"session (%s): lease expired", str);
+					"session (%s): clientid(%s) lease expired, returning status %s",
+					sessionid_str, clientid_str, nfsstat4_to_str(res_SEQUENCE4->sr_status));
 		}
 		return NFS_REQ_ERROR;
 	}
@@ -272,9 +275,14 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 		dec_session_ref(session);
 		res_SEQUENCE4->sr_status = NFS4ERR_SEQ_MISORDERED;
+
+		display_session_id(&sessionid_dspbuf, arg_SEQUENCE4->sa_sessionid);
+
 		LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-			    "SEQUENCE returning status %s",
-			    nfsstat4_to_str(res_SEQUENCE4->sr_status));
+					"session (%s): sequence id of solt(%u) and request(%u) is not match, "
+					"returning status %s",
+					sessionid_str, slot->sequence + 1 , arg_SEQUENCE4->sa_sequenceid,
+					nfsstat4_to_str(res_SEQUENCE4->sr_status));
 		return NFS_REQ_ERROR;
 	}
 
