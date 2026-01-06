@@ -143,8 +143,8 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		return NFS_REQ_ERROR;
 	}
 
-	LogDebug(component,
-		 "CREATE_SESSION client addr=%s clientid=%s -------------------",
+	LogFullDebug(component,
+		 "CREATE_SESSION client addr=%s client_id=%s -------------------",
 		 str_client_addr, str_clientid4);
 
 	/* First try to look up unconfirmed record */
@@ -158,7 +158,7 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		if (rc != CLIENT_ID_SUCCESS) {
 			/* No record whatsoever of this clientid */
 			LogDebug(component,
-				 "%s clientid=%s",
+				 "%s client_id=%s",
 				 clientid_error_to_str(rc), str_clientid4);
 
 			if (rc == CLIENT_ID_EXPIRED)
@@ -197,11 +197,11 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 	 */
 
 	LogDebug(component,
-		 "CREATE_SESSION clientid=%s csa_sequence=%" PRIu32
+		 "CREATE_SESSION csa_sequence=%" PRIu32
 		 " clientid_cs_seq=%" PRIu32
-		 " data_oppos=%d",
-		 str_clientid4, arg_CREATE_SESSION4->csa_sequence,
-		 found->cid_create_session_sequence, data->oppos);
+		 " data_oppos=%d, client_id=%s",
+		 arg_CREATE_SESSION4->csa_sequence, found->cid_create_session_sequence,
+		 data->oppos, str_clientid4);
 
 	if (isFullDebug(component)) {
 		char str[LOG_BUFF_LEN] = "\0";
@@ -556,9 +556,9 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		display_session_id(&dspbuf, nfs41_session->session_id);
 
 		LogDebug(component,
-			 "session %p, successful create session %s csa_flags 0x%X csr_flags 0x%X",
+			 "session (%p): successfully create session %s csa_flags 0x%X csr_flags 0x%X, client_id=%s",
 			  nfs41_session, str, arg_CREATE_SESSION4->csa_flags,
-			  res_CREATE_SESSION4ok->csr_flags);
+			  res_CREATE_SESSION4ok->csr_flags, str_clientid4);
 	}
 
 	/* Successful exit */
