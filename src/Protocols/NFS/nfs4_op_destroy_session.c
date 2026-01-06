@@ -64,6 +64,9 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 	    &resp->nfs_resop4_u.opdestroy_session;
 	nfs41_session_t *session;
 
+	char str[LOG_BUFF_LEN];
+	struct display_buffer dspbuf = {sizeof(str), str, str};
+
 	resp->resop = NFS4_OP_DESTROY_SESSION;
 	res_DESTROY_SESSION4->dsr_status = NFS4_OK;
 
@@ -75,9 +78,7 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 	if (!nfs41_Session_Get_Pointer(arg_DESTROY_SESSION4->dsa_sessionid,
 				       &session)) {
 		if (isDebug(COMPONENT_SESSIONS)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
+			memset(str, 0, sizeof(str));
 			display_session_id(&dspbuf, arg_DESTROY_SESSION4->dsa_sessionid);
 			LogDebug(COMPONENT_SESSIONS, "session: %s not found", str);
 		}
@@ -90,9 +91,7 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 	 */
 	if (!check_session_conn(session, data, false)) {
 		if (isDebug(COMPONENT_SESSIONS)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
+			memset(str, 0, sizeof(str));
 			display_session_id(&dspbuf, session->session_id);
 			LogDebug(COMPONENT_SESSIONS, "session (%p): conn not bound %s", session, str);
 		}
@@ -103,9 +102,7 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 
 	if (!nfs41_Session_Del(arg_DESTROY_SESSION4->dsa_sessionid)){
 		if (isDebug(COMPONENT_SESSIONS)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
+			memset(str, 0, sizeof(str));
 			display_session_id(&dspbuf, session->session_id);
 			LogDebug(COMPONENT_SESSIONS, "session (%p): failed to delete %s", session, str);
 		}
@@ -113,9 +110,7 @@ enum nfs_req_result nfs4_op_destroy_session(struct nfs_argop4 *op,
 	}
 	else{
 		if (isDebug(COMPONENT_SESSIONS)) {
-			char str[LOG_BUFF_LEN] = "\0";
-			struct display_buffer dspbuf = {sizeof(str), str, str};
-
+			memset(str, 0, sizeof(str));
 			display_session_id(&dspbuf, session->session_id);
 			LogDebug(COMPONENT_SESSIONS, "session (%p): successfully delete %s", session, str);
 		}
