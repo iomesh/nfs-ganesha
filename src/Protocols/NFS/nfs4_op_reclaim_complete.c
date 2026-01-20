@@ -79,16 +79,15 @@ enum nfs_req_result nfs4_op_reclaim_complete(struct nfs_argop4 *op,
 	    &resp->nfs_resop4_u.opreclaim_complete;
 	nfs_client_id_t	*clientid = data->session->clientid_record;
 
+	char client_id_str[DISPLAY_CLIENTID_SIZE];
+	struct display_buffer client_id_dspbuf
+		= {sizeof(client_id_str), client_id_str, client_id_str};
+
+	display_clientid(&client_id_dspbuf, clientid->cid_clientid);
+
 	resp->resop = NFS4_OP_RECLAIM_COMPLETE;
 
 	res_RECLAIM_COMPLETE4->rcr_status = NFS4_OK;
-
-	LogDebug(COMPONENT_CLIENTID,
-		 "clientid: %lu cid_recov_tag: [%s] cur_complete: %d allow_reclaim: %d",
-		 clientid->cid_clientid,
-		 clientid->cid_recov_tag,
-		 clientid->cid_cb.v41.cid_reclaim_complete,
-		 clientid->cid_allow_reclaim);
 
 	/* For now, we don't handle rca_one_fs, so we won't complain about
 	 * complete already for it.
@@ -96,14 +95,22 @@ enum nfs_req_result nfs4_op_reclaim_complete(struct nfs_argop4 *op,
 	if (clientid->cid_cb.v41.cid_reclaim_complete &&
 	    !arg_RECLAIM_COMPLETE4->rca_one_fs) {
 		res_RECLAIM_COMPLETE4->rcr_status = NFS4ERR_COMPLETE_ALREADY;
+		LogDebug(COMPONENT_CLIENTID,
+				"client (client_id=%s): already reclaim complete", client_id_str);
 		return NFS_REQ_ERROR;
 	}
 
 	if (!arg_RECLAIM_COMPLETE4->rca_one_fs) {
 		clientid->cid_cb.v41.cid_reclaim_complete = true;
-		if (clientid->cid_allow_reclaim)
+		if (clientid->cid_allow_reclaim){
 			atomic_inc_int32_t(&reclaim_completes);
+		}
 	}
+
+	LogDebug(COMPONENT_CLIENTID,
+			"client (client_id=%s): Successfully reclaim complete, %s",
+			client_id_str,
+			clientid->cid_allow_reclaim ? "allow recalim": "not allow reclaim");
 
 	return NFS_REQ_OK;
 }				/* nfs41_op_reclaim_complete */
