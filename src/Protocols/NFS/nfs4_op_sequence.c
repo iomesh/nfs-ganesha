@@ -144,9 +144,6 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 	nfs41_session_t *session;
 	nfs41_session_slot_t *slot;
 
-	char clientid_str[DISPLAY_CLIENTID_SIZE];
-	struct display_buffer clientid_dspbuf = {sizeof(clientid_str), clientid_str, clientid_str};
-
 	char sessionid_str[LOG_BUFF_LEN];
 	struct display_buffer sessionid_dspbuf = {sizeof(sessionid_str), sessionid_str, sessionid_str};
 
@@ -174,17 +171,21 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	LogFullDebug(COMPONENT_SESSIONS, "SEQUENCE session=%p", session);
 
-	display_clientid(&clientid_dspbuf, session->clientid_record->cid_clientid);
-
 	/* Check if lease is expired and reserve it */
 	if (!reserve_lease_or_expire(session->clientid_record, false)) {
 		dec_session_ref(session);
 		res_SEQUENCE4->sr_status = NFS4ERR_EXPIRED;
+
 		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
+			char client_rec_str[DISPLAY_CLIENT_REC_SIZE] = "\0";
+			struct display_buffer client_rec_dspbuf = {sizeof(client_rec_str), client_rec_str, client_rec_str};
+
+			display_client_id_rec(&client_rec_dspbuf, session->clientid_record);
 			display_session_id(&sessionid_dspbuf, arg_SEQUENCE4->sa_sessionid);
+
 			LogDebugAlt(COMPONENT_SESSIONS, COMPONENT_CLIENTID,
-					"session (%s): clientid(%s) lease expired, returning status %s",
-					sessionid_str, clientid_str, nfsstat4_to_str(res_SEQUENCE4->sr_status));
+					"session (%s): client lease expired, returning status %s, client {%s}",
+					sessionid_str, nfsstat4_to_str(res_SEQUENCE4->sr_status), client_rec_str);
 		}
 		return NFS_REQ_ERROR;
 	}
