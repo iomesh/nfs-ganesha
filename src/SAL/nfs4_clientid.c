@@ -175,7 +175,7 @@ int display_client_id_rec(struct display_buffer *dspbuf,
 			  nfs_client_id_t *clientid)
 {
 	int delta;
-	int b_left = display_printf(dspbuf, "%p ClientID={", clientid);
+	int b_left = display_printf(dspbuf, "%p ClientID=", clientid);
 
 	if (b_left <= 0)
 		return b_left;
@@ -187,7 +187,7 @@ int display_client_id_rec(struct display_buffer *dspbuf,
 
 	b_left = display_printf(
 		dspbuf,
-		"} %s Client={",
+		" ConfirmState=%s ClientRecord={",
 		clientid_confirm_state_to_str(clientid->cid_confirmed));
 
 	if (b_left <= 0)

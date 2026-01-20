@@ -72,7 +72,7 @@ uint64_t global_sequence;
 
 int display_session_id(struct display_buffer *dspbuf, char *session_id)
 {
-	int b_left = display_cat(dspbuf, "sessionid=");
+	int b_left = display_cat(dspbuf, "session_id=");
 
 	if (b_left > 0)
 		b_left = display_opaque_value(dspbuf,
@@ -106,7 +106,7 @@ int display_session_id_key(struct display_buffer *dspbuf,
 
 int display_session(struct display_buffer *dspbuf, nfs41_session_t *session)
 {
-	int b_left = display_printf(dspbuf, "session %p {", session);
+	int b_left = display_printf(dspbuf, "session {%p", session);
 
 	if (b_left > 0)
 		b_left = display_session_id(dspbuf, session->session_id);
