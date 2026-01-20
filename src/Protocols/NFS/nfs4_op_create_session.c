@@ -158,8 +158,8 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		if (rc != CLIENT_ID_SUCCESS) {
 			/* No record whatsoever of this clientid */
 			LogDebug(component,
-				 "%s client_id=%s",
-				 clientid_error_to_str(rc), str_clientid4);
+				 "client (client_id=%s): failed to get client, error %s",
+				 str_clientid4, clientid_error_to_str(rc));
 
 			if (rc == CLIENT_ID_EXPIRED)
 				rc = CLIENT_ID_STALE;
@@ -197,18 +197,17 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 	 */
 
 	LogDebug(component,
-		 "CREATE_SESSION csa_sequence=%" PRIu32
-		 " clientid_cs_seq=%" PRIu32
-		 " data_oppos=%d, client_id=%s",
-		 arg_CREATE_SESSION4->csa_sequence, found->cid_create_session_sequence,
-		 data->oppos, str_clientid4);
+		 "client (client_id=%s): CREATE_SESSION begin, csa_sequence=%" PRIu32
+		 " clientid_cs_seq=%" PRIu32 " data_oppos=%d",
+		 str_clientid4, arg_CREATE_SESSION4->csa_sequence, found->cid_create_session_sequence,
+		 data->oppos);
 
 	if (isFullDebug(component)) {
-		char str[LOG_BUFF_LEN] = "\0";
+		char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 		struct display_buffer dspbuf = {sizeof(str), str, str};
 
 		display_client_id_rec(&dspbuf, found);
-		LogFullDebug(component, "Found %s", str);
+		LogFullDebug(component, "Found client {%s}", str);
 	}
 
 	if ((arg_CREATE_SESSION4->csa_sequence + 1) ==
@@ -431,11 +430,11 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 	if (conf != NULL && conf->cid_clientid != clientid) {
 		/* Old confirmed record - need to expire it */
 		if (isDebug(component)) {
-			char str[LOG_BUFF_LEN] = "\0";
+			char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 			struct display_buffer dspbuf = {sizeof(str), str, str};
 
 			display_client_id_rec(&dspbuf, conf);
-			LogDebug(component, "Expiring %s", str);
+			LogDebug(component, "Expiring client {%s}", str);
 		}
 
 		/* Expire clientid and release our reference.
@@ -452,7 +451,6 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		 * clientid.  Update the confirmed record from the
 		 * unconfirmed record.
 		 */
-		display_clientid(&dspbuf_clientid4, conf->cid_clientid);
 		LogDebug(component,
 			 "Updating clientid %s->%s cb_program=%u",
 			 str_clientid4, str_client,
@@ -475,20 +473,20 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		}
 
 		if (isDebug(component)) {
-			char str[LOG_BUFF_LEN] = "\0";
+			char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 			struct display_buffer dspbuf = {sizeof(str), str, str};
 
 			display_client_id_rec(&dspbuf, conf);
-			LogDebug(component, "Updated %s", str);
+			LogDebug(component, "Updated client {%s}", str);
 		}
 	} else {
 		/* This is a new clientid */
 		if (isFullDebug(component)) {
-			char str[LOG_BUFF_LEN] = "\0";
+			char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 			struct display_buffer dspbuf = {sizeof(str), str, str};
 
 			display_client_id_rec(&dspbuf, unconf);
-			LogFullDebug(component, "Confirming new %s", str);
+			LogFullDebug(component, "Confirming new client {%s}", str);
 		}
 
 		rc = nfs_client_id_confirm(unconf, component);
@@ -510,11 +508,11 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		unconf = NULL;
 
 		if (isDebug(component)) {
-			char str[LOG_BUFF_LEN] = "\0";
+			char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 			struct display_buffer dspbuf = {sizeof(str), str, str};
 
 			display_client_id_rec(&dspbuf, conf);
-			LogFullDebug(component, "Confirmed %s", str);
+			LogDebug(component, "Confirmed client {%s}", str);
 		}
 	}
 	conf->cid_create_session_sequence++;
@@ -553,12 +551,12 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 		char str[LOG_BUFF_LEN] = "\0";
 		struct display_buffer dspbuf = {sizeof(str), str, str};
 
-		display_session_id(&dspbuf, nfs41_session->session_id);
+		display_session(&dspbuf, nfs41_session);
 
 		LogDebug(component,
-			 "session (%p): successfully create session %s csa_flags 0x%X csr_flags 0x%X, client_id=%s",
-			  nfs41_session, str, arg_CREATE_SESSION4->csa_flags,
-			  res_CREATE_SESSION4ok->csr_flags, str_clientid4);
+			 "client (client_id=%s): successfully create %s, csa_flags 0x%X csr_flags 0x%X",
+			  str_clientid4, str, arg_CREATE_SESSION4->csa_flags,
+			  res_CREATE_SESSION4ok->csr_flags);
 	}
 
 	/* Successful exit */

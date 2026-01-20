@@ -278,11 +278,11 @@ enum nfs_req_result nfs4_op_exchange_id(struct nfs_argop4 *op,
 			 */
 
 			if (isDebug(COMPONENT_CLIENTID)) {
-				char str[DISPLAY_CLIENTID_SIZE];
+				char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 				struct display_buffer dspbuf = {sizeof(str), str, str};
 
-				display_clientid(&dspbuf, conf->cid_clientid);
-				LogDebug(COMPONENT_CLIENTID, "successfully found client_id=%s", str);
+				display_client_id_rec(&dspbuf, conf);
+				LogDebug(COMPONENT_CLIENTID, "Successfully found client {%s}", str);
 			}
 			unconf = conf;
 			res_EXCHANGE_ID4_ok->eir_flags |=
@@ -383,11 +383,11 @@ enum nfs_req_result nfs4_op_exchange_id(struct nfs_argop4 *op,
 	}
 
 	if (isDebug(COMPONENT_CLIENTID)) {
-		char str[DISPLAY_CLIENTID_SIZE];
+		char str[DISPLAY_CLIENT_REC_SIZE] = "\0";
 		struct display_buffer dspbuf = {sizeof(str), str, str};
 
-		display_clientid(&dspbuf, unconf->cid_clientid);
-		LogDebug(COMPONENT_CLIENTID, "successfully create client_id=%s", str);
+		display_client_id_rec(&dspbuf, unconf);
+		LogDebug(COMPONENT_CLIENTID, "Successfully create client {%s}", str);
 	}
 
  return_ok:
