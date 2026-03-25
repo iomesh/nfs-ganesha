@@ -217,6 +217,7 @@ static int sfs_cluster_recovery_init(void)
 
 	struct NFSServerCallbacks nfs_cbs;
 	nfs_cbs.start_grace_cb = sfs_start_grace;
+	nfs_cbs.cancel_grace_start_cb = nfs_cancel_grace_start;
 	nfs_cbs.get_status_cb = get_ganesha_status;
 	nfs_cbs.get_vip_inflight_req_cb = get_gsh_service_ip_inflight_count;
 	int ret = sfs_recovery_backend_init(sessionid, nfs_cbs);
