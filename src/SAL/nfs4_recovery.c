@@ -398,6 +398,12 @@ out:
 	return ret;
 }
 
+void nfs_cancel_grace_start(void)
+{
+	uint32_t cur = __sync_and_and_fetch(&grace_status, ~GRACE_STATUS_CHANGE_REQ);
+	LogEvent(COMPONENT_STATE, "Cancel to start grace, grace status 0x%x", cur);
+}
+
 /**
  * @brief Check if we are in the grace period
  *
