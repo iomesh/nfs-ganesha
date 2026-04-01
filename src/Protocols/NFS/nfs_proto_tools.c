@@ -3756,8 +3756,18 @@ bool xdr_fattr4_encode(XDR *xdrs, struct xdr_attrs_args *args,
 		 */
 		if (fattr4tab[attribute_to_set].attrmask &&
 		    !(fattr4tab[attribute_to_set].attrmask &
-		      args->attrs->valid_mask))
-			continue;
+		      args->attrs->valid_mask)) {
+			/* FATTR4_ACL is an exception, FSAL like CEPH return
+			 * success without ATTR_ACL when no ACLs set. Enable
+			 * synthesizing NFSv4 ACLs based on mode.
+			 */
+			if (attribute_to_set == FATTR4_ACL &&
+			    FSAL_TEST_MASK(args->attrs->valid_mask, ATTR_MODE))
+				LogDebug(COMPONENT_NFS_V4_ACL,
+					 "Synthesizing ACLs from mode");
+			else
+				continue;
+		}
 
 		/* Check for special cases */
 		if (fattr4tab[attribute_to_set].encoded &&
