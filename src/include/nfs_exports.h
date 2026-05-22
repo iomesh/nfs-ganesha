@@ -92,6 +92,7 @@ struct exportlist_client_entry {
 						  specified */
 #define EXPORT_OPTION_SECLABEL_SET 0x00000100 /* Set if export supports v4.2
 						 security labels */
+#define EXPORT_OPTION_DROP_DELAY_ERRORS 0x00000200 /* Drop NFSv3 delay errors */
 
 /* Constants for export permissions masks */
 #define EXPORT_OPTION_ROOT 0	/*< Allow root access as root uid */

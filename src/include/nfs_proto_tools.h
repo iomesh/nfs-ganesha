@@ -44,6 +44,7 @@
 #include "nfs_file_handle.h"
 #include "sal_data.h"
 #include "fsal.h"
+#include "nfs_exports.h"
 #ifdef USE_NFSACL3
 #include "posix_acls.h"
 #include <sys/acl.h>
@@ -250,7 +251,13 @@ void nfs_PreOpAttrFromFsalAttr(struct fsal_attrlist *fsal_attrs,
 
 static inline bool nfs_DropDelayErrors(void)
 {
-	return nfs_param.core_param.drop_delay_errors;
+	if (op_ctx == NULL || op_ctx->ctx_export == NULL)
+		return nfs_param.core_param.drop_delay_errors;
+
+	if (!op_ctx_export_has_option_set(EXPORT_OPTION_DROP_DELAY_ERRORS))
+		return nfs_param.core_param.drop_delay_errors;
+
+	return op_ctx_export_has_option(EXPORT_OPTION_DROP_DELAY_ERRORS);
 }
 
 bool nfs_RetryableError(fsal_errors_t fsal_errors);
