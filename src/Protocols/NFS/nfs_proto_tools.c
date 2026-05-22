@@ -221,7 +221,7 @@ bool nfs_RetryableError(fsal_errors_t fsal_errors)
 		break;
 
 	case ERR_FSAL_DELAY:
-		if (nfs_param.core_param.drop_delay_errors) {
+		if (nfs_DropDelayErrors()) {
 			/* Drop the request */
 			return true;
 		} else {
