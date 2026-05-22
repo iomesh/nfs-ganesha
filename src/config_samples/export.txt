@@ -127,6 +127,9 @@ EXPORT_DEFAULTS
 #			These 5 options have the same range of values from
 #			512 to 9 megabytes.
 #
+# DropDelayErrors (default unused) Drop rather than reply to NFSv3 delay errors.
+#			When unused, uses NFS_CORE_PARAM Drop_Delay_Errors.
+#
 # MaxOffsetWrite (18446744073709551615)	Maximum file offset that may be written
 # MaxOffsetRead (18446744073709551615)	Maximum file offset that may be read
 #					These options may be used to restrict
