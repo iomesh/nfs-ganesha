@@ -36,6 +36,7 @@ SET(nfsproto_STAT_SRCS
    nfs4_op_destroy_session.c
    nfs4_op_exchange_id.c
    nfs4_op_free_stateid.c
+   nfs4_op_get_dir_delegation.c
    nfs4_op_getattr.c
    nfs4_op_getdeviceinfo.c
    nfs4_op_getdevicelist.c
