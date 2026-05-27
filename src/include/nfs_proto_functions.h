@@ -352,6 +352,10 @@ enum nfs_req_result nfs4_op_getdevicelist(struct nfs_argop4 *,
 enum nfs_req_result nfs4_op_free_stateid(struct nfs_argop4 *, compound_data_t *,
 					 struct nfs_resop4 *);
 
+enum nfs_req_result nfs4_op_get_dir_delegation(struct nfs_argop4 *,
+					       compound_data_t *,
+					       struct nfs_resop4 *);
+
 enum nfs_req_result nfs4_op_getdeviceinfo(struct nfs_argop4 *,
 					  compound_data_t *,
 					  struct nfs_resop4 *);
@@ -583,6 +587,7 @@ void nfs4_op_exchange_id_Free(nfs_resop4 *);
 void nfs4_op_close_Free(nfs_resop4 *);
 void nfs4_op_create_session_Free(nfs_resop4 *);
 void nfs4_op_getdevicelist_Free(nfs_resop4 *);
+void nfs4_op_get_dir_delegation_Free(nfs_resop4 *);
 void nfs4_op_getdeviceinfo_Free(nfs_resop4 *);
 void nfs4_op_free_stateid_Free(nfs_resop4 *);
 void nfs4_op_destroy_session_Free(nfs_resop4 *);
