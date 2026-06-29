@@ -601,9 +601,21 @@ static inline fsal_accessflags_t FSAL_ACE4_MASK(fsal_accessflags_t access)
 
 #define IS_FSAL_ACE4_REQ(access) (access & FSAL_ACE4_REQ_FLAG)
 
+/*
+ * NFSv4 ACL maps write to two independent ACE bits:
+ *   w (WRITE_DATA)  -> modify bytes within the current file size
+ *   a (APPEND_DATA) -> extend at or past EOF
+ *
+ * FSAL_WRITE_ACCESS keeps the legacy "require both" mask.
+ * OPEN/WRITE paths should use OPEN_WRITE and EXTEND_WRITE instead.
+ */
 #define FSAL_WRITE_ACCESS (FSAL_MODE_MASK_SET(FSAL_W_OK) | \
 			   FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_DATA | \
 					      FSAL_ACE_PERM_APPEND_DATA))
+#define FSAL_OPEN_WRITE_ACCESS (FSAL_MODE_MASK_SET(FSAL_W_OK) | \
+				FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_DATA))
+#define FSAL_EXTEND_WRITE_ACCESS (FSAL_MODE_MASK_SET(FSAL_W_OK) | \
+				  FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_APPEND_DATA))
 #define FSAL_READ_ACCESS (FSAL_MODE_MASK_SET(FSAL_R_OK) | \
 			  FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_READ_DATA))
 #define FSAL_EXECUTE_ACCESS (FSAL_MODE_MASK_SET(FSAL_X_OK) | \

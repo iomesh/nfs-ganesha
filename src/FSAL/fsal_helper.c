@@ -101,8 +101,31 @@ static fsal_status_t check_open_permission(struct fsal_obj_handle *obj,
 	if (openflags & FSAL_O_READ)
 		access_mask |= FSAL_READ_ACCESS;
 
-	if (openflags & FSAL_O_WRITE)
-		access_mask |= FSAL_WRITE_ACCESS;
+	/*
+	 * OPEN share write does not know the first WRITE offset. Accept either
+	 * modify (w) or extend-only (a) capability. For O_RDWR, OR in
+	 * access_mask so READ is checked in the same test_access call.
+	 * Actual MODIFY vs EXTEND is enforced again on each WRITE.
+	 */
+	if (openflags & FSAL_O_WRITE) {
+		fsal_status_t write_status;
+
+		write_status = obj->obj_ops->test_access(
+			obj, access_mask | FSAL_OPEN_WRITE_ACCESS, NULL, NULL,
+			exclusive_create || (openflags & FSAL_O_RECLAIM));
+		/* Append-only ACE: no WRITE_DATA, but EXTEND may succeed. */
+		if (FSAL_IS_ERROR(write_status) &&
+		    write_status.major == ERR_FSAL_ACCESS) {
+			write_status = obj->obj_ops->test_access(
+				obj, access_mask | FSAL_EXTEND_WRITE_ACCESS, NULL,
+				NULL,
+				exclusive_create || (openflags & FSAL_O_RECLAIM));
+		}
+		if (FSAL_IS_ERROR(write_status)) {
+			*reason = "fsal_access failed with WRITE_ACCESS - ";
+			return write_status;
+		}
+	}
 
 	/* Ask for owner_skip on exclusive create (we will be checking the
 	 * verifier later, so this allows a replay of
