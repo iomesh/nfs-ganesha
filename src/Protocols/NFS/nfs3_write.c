@@ -273,6 +273,12 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 
 	nfs_SetPreOpAttr(obj, &pre_attr);
 
+	/*
+	 * NFSv3 open sends ACCESS requiring both MODIFY and EXTEND; only :wa
+	 * callers reach WRITE, so FSAL_WRITE_ACCESS (w+a both required) is
+	 * sufficient and matches the ACCESS gate. See NetApp capture
+	 * docs/captures/netapp-access-write-20260706/README.md.
+	 */
 	fsal_status =
 	    obj->obj_ops->test_access(obj, FSAL_WRITE_ACCESS, NULL, NULL, true);
 
