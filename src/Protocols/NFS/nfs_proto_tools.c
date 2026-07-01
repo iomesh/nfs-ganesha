@@ -273,6 +273,7 @@ bool nfs_RetryableError(fsal_errors_t fsal_errors)
 	case ERR_FSAL_FAULT:
 	case ERR_FSAL_SERVERFAULT:
 	case ERR_FSAL_DEADLOCK:
+	case ERR_FSAL_BADOWNER:
 	case ERR_FSAL_BADNAME:
 	case ERR_FSAL_CROSS_JUNCTION:
 	case ERR_FSAL_IN_GRACE:
