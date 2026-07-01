@@ -300,6 +300,7 @@ state_status_t state_error_convert(fsal_status_t fsal_status)
 	case ERR_FSAL_NO_DATA:
 	case ERR_FSAL_NO_ACE:
 	case ERR_FSAL_CROSS_JUNCTION:
+	case ERR_FSAL_BADOWNER:
 	case ERR_FSAL_BADNAME:
 	case ERR_FSAL_NOXATTR:
 	case ERR_FSAL_XATTR2BIG:
