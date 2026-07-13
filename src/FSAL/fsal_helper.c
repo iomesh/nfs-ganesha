@@ -310,34 +310,47 @@ static fsal_status_t fsal_check_setattr_perms(struct fsal_obj_handle *obj,
 			    "Change SIZE requires FSAL_ACE_PERM_WRITE_DATA");
 	}
 
-	/* Check if just setting atime and mtime to "now" */
-	if ((FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME_SERVER)
-	     || FSAL_TEST_MASK(attr->valid_mask, ATTR_ATIME_SERVER))
-	    && !FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME)
-	    && !FSAL_TEST_MASK(attr->valid_mask, ATTR_ATIME)) {
-		/* If either atime and/or mtime are set to "now" then need only
-		 * have write permission.
-		 *
-		 * Technically, client should not send atime updates, but if
-		 * they really do, we'll let them to make the perm check a bit
-		 * simpler. */
-		access_check |= FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_DATA);
-		LogDebug(COMPONENT_FSAL,
-			    "Change ATIME and MTIME to NOW requires FSAL_ACE_PERM_WRITE_DATA");
-	} else if (FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME_SERVER)
-		   || FSAL_TEST_MASK(attr->valid_mask, ATTR_ATIME_SERVER)
-		   || FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME)
+	if (FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME)
 		   || FSAL_TEST_MASK(attr->valid_mask, ATTR_ATIME)) {
-		/* Any other changes to atime or mtime require owner, root, or
-		 * ACES4_WRITE_ATTRIBUTES.
+		/* SETATTR FATTR4_TIME_*_SET with SET_TO_CLIENT_TIME4 (section
+		 * 18.30.4); Ganesha: ATTR_MTIME / ATTR_ATIME.
 		 *
-		 * NOTE: we explicitly do NOT check for update of atime only to
-		 * "now". Section 10.6 of both RFC 3530 and RFC 5661 document
-		 * the reasons clients should not do atime updates.
+		 * RFC 8881 (section 6.2.1.3.1): arbitrary time_access_set /
+		 * time_modify_set requires ACE4_WRITE_ATTRIBUTES; a non-owner
+		 * who holds that ACE would be allowed.
+		 *
+		 * Linux (utimensat(2)): explicit client timestamps require file
+		 * owner or privilege; otherwise EPERM.  Linux nfsd_setattr omits
+		 * NFSD_MAY_WRITE when ATTR_*_SET is present (reference only).
+		 *
+		 * Compromise: reject all non-owners here (ERR_FSAL_PERM /
+		 * NFS4ERR_PERM, section 15.1.6.2) without test_access(WRITE_ATTR).
+		 * Follows Linux for POSIX clients; stricter than RFC when mode/ACL
+		 * grants WriteAttributes without ownership (e.g. chmod 0666).
 		 */
-		access_check |= FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_ATTR);
+		status = fsalstat(ERR_FSAL_PERM, 0);
+		note = " (explicit client time; Linux owner-only compromise)";
+		goto out;
+	}
+
+	if (FSAL_TEST_MASK(attr->valid_mask, ATTR_MTIME_SERVER)
+		   || FSAL_TEST_MASK(attr->valid_mask, ATTR_ATIME_SERVER)) {
+		/* SETATTR FATTR4_TIME_*_SET with SET_TO_SERVER_TIME4 (section
+		 * 18.30.4); Ganesha: ATTR_MTIME_SERVER / ATTR_ATIME_SERVER.
+		 *
+		 * RFC 8881 (section 6.2.1.3.1): current server time is allowed
+		 * with ACE4_WRITE_DATA or ACE4_WRITE_ATTRIBUTES (either suffices).
+		 *
+		 * Linux (utimensat(2) UTIME_NOW): non-owner needs write access,
+		 * else EACCES; maps to ACE4_WRITE_DATA / MAY_WRITE (nfsd reference).
+		 *
+		 * Compromise: test_access(WRITE_DATA | W_OK) only; does not accept
+		 * WRITE_ATTRIBUTES without write.  Matches Linux; narrower than RFC
+		 * OR rule.  Failure -> ERR_FSAL_ACCESS / NFS4ERR_ACCESS (15.1.6.1).
+		 */
+		access_check |= FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_DATA) | FSAL_MODE_MASK_SET(FSAL_W_OK);
 		LogDebug(COMPONENT_FSAL,
-			    "Change ATIME and/or MTIME requires FSAL_ACE_PERM_WRITE_ATTR");
+			    "Change SERVER ATIME/MTIME (write-perm compromise vs RFC OR rule)");
 	}
 
 	if (isDebug(COMPONENT_FSAL) || isDebug(COMPONENT_NFS_V4_ACL)) {
@@ -363,23 +376,8 @@ static fsal_status_t fsal_check_setattr_perms(struct fsal_obj_handle *obj,
 			    need_write_acl, need_write_data, need_write_attr);
 	}
 
-	if (current->acl) {
-		status = obj->obj_ops->test_access(obj, access_check, NULL,
-						  NULL, false);
-		note = " (checked ACL)";
-		goto out;
-	}
-
-	if (access_check != FSAL_ACE4_MASK_SET(FSAL_ACE_PERM_WRITE_DATA)) {
-		/* Without an ACL, this user is not allowed some operation */
-		status = fsalstat(ERR_FSAL_PERM, 0);
-		note = " (no ACL to check)";
-		goto out;
-	}
-
-	status = obj->obj_ops->test_access(obj, FSAL_W_OK, NULL, NULL, false);
-
-	note = " (checked mode)";
+	note = " (checked ACL)";
+	status = obj->obj_ops->test_access(obj, access_check, NULL, NULL, false);
 
  out:
 
