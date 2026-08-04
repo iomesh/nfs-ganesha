@@ -71,6 +71,10 @@
 #include "pnfs_utils.h"
 #include "atomic_utils.h"
 #include "sys_resource.h"
+#ifdef USE_MONITORING
+#include "monitoring.h"
+#endif
+
 /* fsal_attach_export
  * called from the FSAL's create_export method with a reference on the fsal.
  */
@@ -3328,11 +3332,17 @@ bool attrs_get(struct req_op_context *ctx, struct fsal_obj_handle *obj,
 		}
 
 		if ((request_mask & table->entries[i].attrs.valid_mask) != request_mask) {
+#ifdef USE_MONITORING
+			monitoring_attrs_get_miss_mask();
+#endif
 			return false;
 		}
 
 		*attrs = table->entries[i].attrs;
 		attrs->request_mask = caller_request_mask;
+#ifdef USE_MONITORING
+		monitoring_attrs_get_hit();
+#endif
 		return true;
 	}
 
