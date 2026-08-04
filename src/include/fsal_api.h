@@ -491,6 +491,7 @@ struct req_op_context {
 	struct timespec start_time;	/*< start time of this op/request */
 	void *fsal_private;		/*< private for FSAL use */
 	void *proto_private;		/*< private for protocol layer use */
+	struct attrs_table *attrs_table;	/*< request-scoped attrs table */
 	struct fsal_module *fsal_module;	/*< current fsal module */
 	struct fsal_pnfs_ds *ctx_pnfs_ds;	/*< current pNFS DS */
 	uint32_t op_id;

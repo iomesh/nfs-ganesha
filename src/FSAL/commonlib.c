@@ -71,7 +71,6 @@
 #include "pnfs_utils.h"
 #include "atomic_utils.h"
 #include "sys_resource.h"
-
 /* fsal_attach_export
  * called from the FSAL's create_export method with a reference on the fsal.
  */
@@ -3220,10 +3219,169 @@ void init_op_context(struct req_op_context *ctx,
 	ctx->flags.pseudo_fsal_internal_lookup = false;
 }
 
+#define ATTRS_TABLE_MAX_ENTRIES 8
+#define ATTRS_TABLE_MAX_KEY 128
+
+struct attrs_table_entry {
+	size_t key_len;
+	uint8_t key_value[ATTRS_TABLE_MAX_KEY];
+	void *attrs;
+	void (*free_attrs)(void *);
+};
+
+struct attrs_table {
+	size_t count;
+	struct attrs_table_entry entries[ATTRS_TABLE_MAX_ENTRIES];
+};
+
+static bool attrs_key_equal(const struct attrs_table_entry *entry,
+			    const struct gsh_buffdesc *fh_desc)
+{
+	return entry->key_len == fh_desc->len && memcmp(entry->key_value, fh_desc->addr, fh_desc->len) == 0;
+}
+
+void attrs_set(struct req_op_context *ctx, struct fsal_obj_handle *obj,
+	       void *attrs, void (*free_attrs)(void *))
+{
+	struct attrs_table *table;
+	struct gsh_buffdesc fh_desc;
+	size_t i;
+
+	if (ctx == NULL || obj == NULL || obj->obj_ops == NULL || attrs == NULL) {
+		if (free_attrs != NULL) {
+			free_attrs(attrs);
+		}
+		return;
+	}
+
+	obj->obj_ops->handle_to_key(obj, &fh_desc);
+	if (fh_desc.addr == NULL || fh_desc.len == 0 || fh_desc.len > ATTRS_TABLE_MAX_KEY) {
+		if (free_attrs != NULL) {
+			free_attrs(attrs);
+		}
+		return;
+	}
+
+	if (ctx->attrs_table == NULL) {
+		ctx->attrs_table = gsh_calloc(1, sizeof(*ctx->attrs_table));
+	}
+
+	table = ctx->attrs_table;
+	for (i = 0; i < table->count; i++) {
+		if (attrs_key_equal(&table->entries[i], &fh_desc)) {
+			if (table->entries[i].attrs != attrs &&
+			    table->entries[i].free_attrs != NULL) {
+				table->entries[i].free_attrs(table->entries[i].attrs);
+			}
+			table->entries[i].attrs = attrs;
+			table->entries[i].free_attrs = free_attrs;
+			return;
+		}
+	}
+
+	if (table->count == ATTRS_TABLE_MAX_ENTRIES) {
+		if (table->entries[0].free_attrs != NULL) {
+			table->entries[0].free_attrs(table->entries[0].attrs);
+		}
+		memmove(&table->entries[0], &table->entries[1],
+				sizeof(table->entries[0]) * (ATTRS_TABLE_MAX_ENTRIES - 1));
+		table->count--;
+		LogDebug(COMPONENT_FSAL, "attrs_table full, dropped oldest entry");
+	}
+
+	table->entries[table->count].key_len = fh_desc.len;
+	memcpy(table->entries[table->count].key_value, fh_desc.addr, fh_desc.len);
+	table->entries[table->count].attrs = attrs;
+	table->entries[table->count].free_attrs = free_attrs;
+	table->count++;
+}
+
+void *attrs_get(struct req_op_context *ctx, struct fsal_obj_handle *obj)
+{
+	struct attrs_table *table;
+	struct gsh_buffdesc fh_desc;
+	size_t i;
+
+	if (ctx == NULL || ctx->attrs_table == NULL || obj == NULL || obj->obj_ops == NULL) {
+		return NULL;
+	}
+
+	obj->obj_ops->handle_to_key(obj, &fh_desc);
+	if (fh_desc.addr == NULL || fh_desc.len == 0 || fh_desc.len > ATTRS_TABLE_MAX_KEY) {
+		return NULL;
+	}
+
+	table = ctx->attrs_table;
+	for (i = 0; i < table->count; i++) {
+		if (!attrs_key_equal(&table->entries[i], &fh_desc)) {
+			continue;
+		}
+
+		return table->entries[i].attrs;
+	}
+
+	return NULL;
+}
+
+void attrs_invalidate(struct req_op_context *ctx, struct fsal_obj_handle *obj)
+{
+	struct attrs_table *table;
+	struct gsh_buffdesc fh_desc;
+	size_t i;
+
+	if (ctx == NULL || ctx->attrs_table == NULL || obj == NULL ||
+	    obj->obj_ops == NULL) {
+		return;
+	}
+
+	obj->obj_ops->handle_to_key(obj, &fh_desc);
+	if (fh_desc.addr == NULL || fh_desc.len == 0 ||
+	    fh_desc.len > ATTRS_TABLE_MAX_KEY) {
+		return;
+	}
+
+	table = ctx->attrs_table;
+	for (i = 0; i < table->count; i++) {
+		if (!attrs_key_equal(&table->entries[i], &fh_desc)) {
+			continue;
+		}
+
+		if (table->entries[i].free_attrs != NULL) {
+			table->entries[i].free_attrs(table->entries[i].attrs);
+		}
+		if (i + 1 < table->count) {
+			memmove(&table->entries[i], &table->entries[i + 1],
+				sizeof(table->entries[0]) *
+					(table->count - i - 1));
+		}
+		table->count--;
+		return;
+	}
+}
+
+void attrs_clear(struct req_op_context *ctx)
+{
+	size_t i;
+
+	if (ctx == NULL || ctx->attrs_table == NULL) {
+		return;
+	}
+
+	for (i = 0; i < ctx->attrs_table->count; i++) {
+		if (ctx->attrs_table->entries[i].free_attrs != NULL) {
+			ctx->attrs_table->entries[i].free_attrs(
+				ctx->attrs_table->entries[i].attrs);
+		}
+	}
+	gsh_free(ctx->attrs_table);
+	ctx->attrs_table = NULL;
+}
+
 void release_op_context(void)
 {
 	struct req_op_context *cur_ctx = op_ctx;
 
+	attrs_clear(cur_ctx);
 	clear_op_context_export_impl();
 
 	/* And now we're done with the gsh_refstr */
