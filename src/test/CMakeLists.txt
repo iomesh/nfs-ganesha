@@ -45,3 +45,9 @@ SET(test_url_regex_SRCS
   )
 add_executable(test_url_regex EXCLUDE_FROM_ALL ${test_url_regex_SRCS})
 target_link_libraries(test_url_regex ganesha_nfsd ${CMAKE_THREAD_LIBS_INIT})
+
+SET(test_attrs_SRCS
+  test_attrs.c
+  )
+add_executable(test_attrs EXCLUDE_FROM_ALL ${test_attrs_SRCS})
+target_link_libraries(test_attrs ganesha_nfsd ${CMAKE_THREAD_LIBS_INIT})

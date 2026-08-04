@@ -115,6 +115,21 @@ static inline void init_op_context_simple(struct req_op_context *ctx,
 void release_op_context(void);
 void suspend_op_context(void);
 void resume_op_context(struct req_op_context *ctx);
+
+/*
+ * Request-scoped attribute reuse for one NFS RPC
+ * (one v3 procedure or one v4 COMPOUND).
+ *
+ * Entries are keyed by a copy of obj_ops->handle_to_key() so MDCache and
+ * sub-FSAL handles for the same object match. FSAL sets after mutators;
+ * FSAL getattr gets. Protocol paths should call getattrs as usual.
+ */
+void attrs_set(struct req_op_context *ctx, struct fsal_obj_handle *obj,
+	       const struct fsal_attrlist *attrs);
+bool attrs_get(struct req_op_context *ctx, struct fsal_obj_handle *obj,
+	       struct fsal_attrlist *attrs);
+void attrs_clear(struct req_op_context *ctx);
+
 void set_op_context_export_fsal(struct gsh_export *exp,
 				struct fsal_export *fsal_exp);
 void clear_op_context_export(void);

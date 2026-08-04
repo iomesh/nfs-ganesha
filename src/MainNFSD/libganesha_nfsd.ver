@@ -2,6 +2,9 @@
   ace_count;
   admin_halt;
   admin_shutdown;
+  attrs_clear;
+  attrs_get;
+  attrs_set;
   avltree_do_insert;
   avltree_init;
   avltree_next;

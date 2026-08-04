@@ -71,7 +71,6 @@
 #include "pnfs_utils.h"
 #include "atomic_utils.h"
 #include "sys_resource.h"
-
 /* fsal_attach_export
  * called from the FSAL's create_export method with a reference on the fsal.
  */
@@ -3220,10 +3219,141 @@ void init_op_context(struct req_op_context *ctx,
 	ctx->flags.pseudo_fsal_internal_lookup = false;
 }
 
+#define ATTRS_TABLE_MAX_ENTRIES 8
+#define ATTRS_TABLE_MAX_KEY 128
+
+struct attrs_table_entry {
+	size_t key_len;
+	uint8_t key_value[ATTRS_TABLE_MAX_KEY];
+	struct fsal_attrlist attrs;
+};
+
+struct attrs_table {
+	size_t count;
+	struct attrs_table_entry entries[ATTRS_TABLE_MAX_ENTRIES];
+};
+
+static void attrs_copy_value(struct fsal_attrlist *dst, const struct fsal_attrlist *src)
+{
+	*dst = *src;
+
+	/* Store values only; do not borrow refcounted/allocated fields. */
+	dst->acl = NULL;
+	dst->valid_mask &= ~ATTR_ACL;
+	dst->fs_locations = NULL;
+	dst->valid_mask &= ~ATTR4_FS_LOCATIONS;
+	dst->sec_label.slai_data.slai_data_len = 0;
+	dst->sec_label.slai_data.slai_data_val = NULL;
+	dst->valid_mask &= ~ATTR4_SEC_LABEL;
+}
+
+static bool attrs_key_equal(const struct attrs_table_entry *entry,
+			    const struct gsh_buffdesc *fh_desc)
+{
+	return entry->key_len == fh_desc->len && memcmp(entry->key_value, fh_desc->addr, fh_desc->len) == 0;
+}
+
+void attrs_set(struct req_op_context *ctx, struct fsal_obj_handle *obj,
+	       const struct fsal_attrlist *attrs)
+{
+	struct attrs_table *table;
+	struct gsh_buffdesc fh_desc;
+	size_t i;
+
+	if (ctx == NULL || obj == NULL || obj->obj_ops == NULL || attrs == NULL
+			|| attrs->valid_mask == 0) {
+		return;
+	}
+
+	obj->obj_ops->handle_to_key(obj, &fh_desc);
+	if (fh_desc.addr == NULL || fh_desc.len == 0 || fh_desc.len > ATTRS_TABLE_MAX_KEY) {
+		return;
+	}
+
+	if (ctx->attrs_table == NULL) {
+		ctx->attrs_table = gsh_calloc(1, sizeof(*ctx->attrs_table));
+	}
+
+	table = ctx->attrs_table;
+	for (i = 0; i < table->count; i++) {
+		if (attrs_key_equal(&table->entries[i], &fh_desc)) {
+			attrs_copy_value(&table->entries[i].attrs, attrs);
+			return;
+		}
+	}
+
+	if (table->count == ATTRS_TABLE_MAX_ENTRIES) {
+		memmove(&table->entries[0], &table->entries[1],
+				sizeof(table->entries[0]) * (ATTRS_TABLE_MAX_ENTRIES - 1));
+		table->count--;
+		LogDebug(COMPONENT_FSAL, "attrs_table full, dropped oldest entry");
+	}
+
+	table->entries[table->count].key_len = fh_desc.len;
+	memcpy(table->entries[table->count].key_value, fh_desc.addr, fh_desc.len);
+	attrs_copy_value(&table->entries[table->count].attrs, attrs);
+	table->count++;
+}
+
+bool attrs_get(struct req_op_context *ctx, struct fsal_obj_handle *obj,
+	       struct fsal_attrlist *attrs)
+{
+	struct attrs_table *table;
+	struct gsh_buffdesc fh_desc;
+	attrmask_t caller_request_mask;
+	attrmask_t request_mask;
+	size_t i;
+
+	if (ctx == NULL || ctx->attrs_table == NULL || obj == NULL || obj->obj_ops == NULL
+			|| attrs == NULL || attrs->request_mask == 0) {
+		return false;
+	}
+
+	obj->obj_ops->handle_to_key(obj, &fh_desc);
+	if (fh_desc.addr == NULL || fh_desc.len == 0 || fh_desc.len > ATTRS_TABLE_MAX_KEY) {
+		return false;
+	}
+
+	table = ctx->attrs_table;
+	caller_request_mask = attrs->request_mask;
+	/* ATTR_RDATTR_ERR controls error reporting; it is not a value. */
+	request_mask = caller_request_mask & ~ATTR_RDATTR_ERR;
+	if (request_mask == 0) {
+		return false;
+	}
+
+	for (i = 0; i < table->count; i++) {
+		if (!attrs_key_equal(&table->entries[i], &fh_desc)) {
+			continue;
+		}
+
+		if ((request_mask & table->entries[i].attrs.valid_mask) != request_mask) {
+			return false;
+		}
+
+		*attrs = table->entries[i].attrs;
+		attrs->request_mask = caller_request_mask;
+		return true;
+	}
+
+	return false;
+}
+
+void attrs_clear(struct req_op_context *ctx)
+{
+	if (ctx == NULL || ctx->attrs_table == NULL) {
+		return;
+	}
+
+	gsh_free(ctx->attrs_table);
+	ctx->attrs_table = NULL;
+}
+
 void release_op_context(void)
 {
 	struct req_op_context *cur_ctx = op_ctx;
 
+	attrs_clear(cur_ctx);
 	clear_op_context_export_impl();
 
 	/* And now we're done with the gsh_refstr */
