@@ -92,6 +92,10 @@ void monitoring_mdcache_cache_hit(const char *operation,
 void monitoring_mdcache_cache_miss(const char *operation,
 				   const export_id_t export_id);
 
+/* Request-scoped attrs_table: only when an entry exists for the object. */
+void monitoring_attrs_get_hit(void);
+void monitoring_attrs_get_miss_mask(void);
+
 /* In flight RPC stats. */
 void monitoring_rpc_received(void);
 void monitoring_rpc_completed(void);
