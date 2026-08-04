@@ -78,6 +78,8 @@ class Metrics {
   prometheus::Family<prometheus::Counter> &mdcacheCacheMissesTotal;
   prometheus::Family<prometheus::Counter> &mdcacheCacheHitsByExportTotal;
   prometheus::Family<prometheus::Counter> &mdcacheCacheMissesByExportTotal;
+  prometheus::Family<prometheus::Counter> &attrsGetHitsTotal;
+  prometheus::Family<prometheus::Counter> &attrsGetMissMaskTotal;
   prometheus::Family<prometheus::Counter> &rpcsReceivedTotal;
   prometheus::Family<prometheus::Counter> &rpcsCompletedTotal;
   prometheus::Family<prometheus::Counter> &errorsByVersionOperationStatus;
@@ -131,6 +133,16 @@ Metrics::Metrics(prometheus::Registry &registry) :
       prometheus::BuildCounter()
       .Name("mdcache_cache_misses_by_export_total")
       .Help("Counter for total cache misses in mdcache, by export.")
+      .Register(registry)),
+  attrsGetHitsTotal(
+      prometheus::BuildCounter()
+      .Name("attrs_get_hit_total")
+      .Help("attrs_table get hits (entry present and mask sufficient).")
+      .Register(registry)),
+  attrsGetMissMaskTotal(
+      prometheus::BuildCounter()
+      .Name("attrs_get_miss_mask_total")
+      .Help("attrs_table get misses due to insufficient attr mask.")
       .Register(registry)),
   rpcsReceivedTotal(
       prometheus::BuildCounter()
@@ -531,6 +543,20 @@ void monitoring_mdcache_cache_miss(const char *operation,
               {kOperation, operation}})
         .Increment();
   }
+}
+
+void monitoring_attrs_get_hit(void) {
+  if (metrics == nullptr) {
+    return;
+  }
+  metrics->attrsGetHitsTotal.Add({}).Increment();
+}
+
+void monitoring_attrs_get_miss_mask(void) {
+  if (metrics == nullptr) {
+    return;
+  }
+  metrics->attrsGetMissMaskTotal.Add({}).Increment();
 }
 
 void monitoring_rpc_received() {
