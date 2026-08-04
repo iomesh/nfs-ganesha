@@ -51,9 +51,11 @@ static const std::initializer_list<double> requestSizeBuckets =
 {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
  65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216};
 
-// 30 time buckets: 0.1 ms to 12 seconds. Generated with 50% increases.
+// 36 time buckets: 0.001 ms (1us) to 12 seconds. Sub-10us (0.001/0.0025/0.005) + sub-100us
+// (0.01/0.025/0.05) low end for fine-grained latency analysis (e.g. ganesha over a RAM-backed
+// FSAL, where per-op processing is single-digit us); the rest is 0.1 ms -> 12 s at 50% increases.
 static const std::initializer_list<double> latencyBuckets =
-{0.1, 0.15, 0.225, 0.337, 0.506, 0.759, 1.13, 1.70, 2.56, 3.84, 5.76, 8.64,
+{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.225, 0.337, 0.506, 0.759, 1.13, 1.70, 2.56, 3.84, 5.76, 8.64,
  12.9, 19.4, 29.1, 43.7, 65.6, 98.5, 147, 221, 332, 498, 748, 1122, 1683, 2525,
  3787, 5681, 8522, 12783};
 
@@ -322,7 +324,7 @@ static void observeNfsRequest(const char *operation,
                               const char *fullpath,
                               const in_addr_t service_ip,
                               const char *client_ip) {
-  const int64_t latency_ms = request_time / NS_PER_MSEC;
+  const double latency_ms = (double)request_time / NS_PER_MSEC;
   std::string operationLowerCase = std::string(operation);
   toLowerCase(operationLowerCase);
   if (client_ip != NULL) {
