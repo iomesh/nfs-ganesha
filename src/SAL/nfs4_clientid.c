@@ -1550,6 +1550,9 @@ int compare_client_record(struct gsh_buffdesc *buff1,
 		return 1;
 	if (pkey1->cr_pnfs_flags != pkey2->cr_pnfs_flags)
 		return 1;
+	if (pkey1->cr_server_addr != pkey2->cr_server_addr) {
+		return 1;
+	}
 
 	return memcmp(pkey1->cr_client_val, pkey2->cr_client_val,
 		      pkey1->cr_client_val_len);
