@@ -206,11 +206,33 @@ enum nfs_req_result nfs4_op_exchange_id(struct nfs_argop4 *op,
 	if (conf != NULL && !update) {
 		/* EXCHGID4_FLAG_UPD_CONFIRMED_REC_A not set
 		 *
-		 * Compare the client credentials, but don't compare
-		 * the client address.  Doing so interferes with
-		 * trunking and the ability of a client to reconnect
-		 * after being assigned a new address.
+		 * Compare the client credentials.  The deployment-specific
+		 * owner/source-IP check below handles the cloned
+		 * client case while preserving same-source trunking.
 		 */
+		if (nfs_param.core_param.enforce_client_owner_source_ip &&
+		    op_ctx->client != NULL && conf->gsh_client != NULL &&
+		    strcmp(conf->gsh_client->hostaddr_str,
+			   op_ctx->client->hostaddr_str) != 0) {
+			/* Reject only while the confirmed client owns live state
+			 * and its lease is valid. This preserves the RFC collision
+			 * rule and allows a new incarnation after expiry.
+			 */
+			PTHREAD_MUTEX_lock(&conf->cid_mutex);
+			if (valid_lease(conf) && client_id_has_state(conf)) {
+				LogWarn(COMPONENT_CLIENTID,
+					"Reject EXCHANGE_ID for duplicate clientowner "
+					"from source %s; active client source is %s",
+					op_ctx->client->hostaddr_str,
+					conf->gsh_client->hostaddr_str);
+				PTHREAD_MUTEX_unlock(&conf->cid_mutex);
+				res_EXCHANGE_ID4->eir_status = NFS4ERR_CLID_INUSE;
+				dec_client_id_ref(conf);
+				goto out;
+			}
+			PTHREAD_MUTEX_unlock(&conf->cid_mutex);
+		}
+
 		if (!nfs_compare_clientcred(&conf->cid_credential,
 					    &data->credential)) {
 			PTHREAD_MUTEX_lock(&conf->cid_mutex);
@@ -302,6 +324,31 @@ enum nfs_req_result nfs4_op_exchange_id(struct nfs_argop4 *op,
 		/* CASE 7, Update but No Confirmed Record */
 		res_EXCHANGE_ID4->eir_status = NFS4ERR_NOENT;
 		goto out;
+	}
+
+	/* Also protect an in-flight EXCHANGE_ID/CREATE_SESSION handshake.
+	 * The unconfirmed record is owned by client_record while cr_mutex is
+	 * held, so it is safe to inspect it here without taking a separate
+	 * client-id reference.
+	 */
+	unconf = client_record->cr_unconfirmed_rec;
+	if (nfs_param.core_param.enforce_client_owner_source_ip &&
+	    unconf != NULL && op_ctx->client != NULL &&
+	    unconf->gsh_client != NULL &&
+	    strcmp(unconf->gsh_client->hostaddr_str,
+		   op_ctx->client->hostaddr_str) != 0) {
+		PTHREAD_MUTEX_lock(&unconf->cid_mutex);
+		if (valid_lease(unconf)) {
+			LogWarn(COMPONENT_CLIENTID,
+				"Reject EXCHANGE_ID for duplicate unconfirmed "
+				"clientowner from source %s; active source is %s",
+				op_ctx->client->hostaddr_str,
+				unconf->gsh_client->hostaddr_str);
+			PTHREAD_MUTEX_unlock(&unconf->cid_mutex);
+			res_EXCHANGE_ID4->eir_status = NFS4ERR_CLID_INUSE;
+			goto out;
+		}
+		PTHREAD_MUTEX_unlock(&unconf->cid_mutex);
 	}
 
 	/* At this point, no matter what the case was above, we should
