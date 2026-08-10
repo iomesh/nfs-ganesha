@@ -45,6 +45,7 @@
 #include "nfs_creds.h"
 #include "export_mgr.h"
 #include "nfs_rpc_callback.h"
+#include "fail_inject.h"
 
 static const char *open_tag = "OPEN";
 
@@ -146,6 +147,21 @@ static nfsstat4 open4_validate_claim(compound_data_t *data,
 
 	case CLAIM_PREVIOUS:
 		want_grace = true;
+		/* fault-injection seam (C9): reject a client's OPEN reclaim
+		 * (CLAIM_PREVIOUS) with a chosen nfsstat4, e.g.
+		 *   PUT /debug/failpoints/nfs4.open.reclaim -d 'return(10033)'
+		 * (10033 == NFS4ERR_NO_GRACE) to construct the "grace active yet
+		 * reclaim refused" lost-state hazard (a naturally-unreachable
+		 * state). The returned value becomes res_OPEN4->status verbatim
+		 * (see the caller: res_OPEN4->status = open4_validate_claim(...)),
+		 * so ret MUST be the raw (nfsstat4)fi_errno -- do NOT wrap it in
+		 * the nfs3 posix2fsal translation, which has no mapping for the
+		 * grace/reclaim nfsstat4 codes. Sited before the grace-ref
+		 * acquisition below, so a firing seam leaves *grace_ref false and
+		 * leaks no reference; only CLAIM_PREVIOUS is affected (a fresh
+		 * CLAIM_NULL open is untouched).
+		 */
+		FAIL_POINT_RET("nfs4.open.reclaim", (nfsstat4)fi_errno);
 		if ((!clientid->cid_allow_reclaim && !fsal_grace_support) ||
 		    ((data->minorversion > 0) &&
 		    clientid->cid_cb.v41.cid_reclaim_complete))
