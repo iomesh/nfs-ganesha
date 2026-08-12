@@ -795,6 +795,10 @@ nfsstat4 nfs4_Errno_verbose(fsal_status_t status, const char *where)
 		nfserror = NFS4ERR_GRACE;
 		break;
 
+	case ERR_FSAL_BADOWNER:
+		nfserror = NFS4ERR_BADOWNER;
+		break;
+
 	case ERR_FSAL_BAD_RANGE:
 		nfserror = NFS4ERR_BAD_RANGE;
 		break;
@@ -965,6 +969,10 @@ nfsstat3 nfs3_Errno_verbose(fsal_status_t status, const char *where)
 
 	case ERR_FSAL_XDEV:
 		nfserror = NFS3ERR_XDEV;
+		break;
+
+	case ERR_FSAL_BADOWNER:
+		nfserror = NFS3ERR_INVAL;
 		break;
 
 	case ERR_FSAL_BADNAME:

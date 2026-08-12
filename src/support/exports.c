@@ -2050,6 +2050,9 @@ static struct config_item fsal_params[] = {
 			EXPORT_OPTION_PREFWRITE_SET, options_set),	\
 	CONF_ITEM_UI64("PrefReaddir", 512, FSAL_MAXIOSIZE, 16384,	\
 		       _struct_, PrefReaddir),				\
+	CONF_ITEM_BOOLBIT_SET("DropDelayErrors", false,		\
+		EXPORT_OPTION_DROP_DELAY_ERRORS,			\
+		_struct_, options, options_set),			\
 	CONF_ITEM_FSID_SET("Filesystem_id", 666, 666,			\
 		       _struct_, filesystem_id, /* major.minor */	\
 		       EXPORT_OPTION_FSID_SET, options_set),		\
