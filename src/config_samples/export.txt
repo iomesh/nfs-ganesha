@@ -129,6 +129,7 @@ EXPORT_DEFAULTS
 #
 # DropDelayErrors (default unused) Drop rather than reply to NFSv3 delay errors.
 #			When unused, uses NFS_CORE_PARAM Drop_Delay_Errors.
+#			When effective, also treat NFSv3 UNSTABLE WRITE as sync.
 #
 # MaxOffsetWrite (18446744073709551615)	Maximum file offset that may be written
 # MaxOffsetRead (18446744073709551615)	Maximum file offset that may be read
