@@ -240,7 +240,16 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 		atomic_fetch_uint64_t(&op_ctx->ctx_export->MaxWrite);
 	uint64_t MaxOffsetWrite =
 		atomic_fetch_uint64_t(&op_ctx->ctx_export->MaxOffsetWrite);
-	bool force_sync = op_ctx->export_perms.options & EXPORT_OPTION_COMMIT;
+	/*
+	 * DropDelayErrors also forces NFSv3 UNSTABLE WRITE to sync. This
+	 * works around a Windows NFS client bug: for Direct I/O, Windows
+	 * may split a large write into multiple asynchronous (UNSTABLE)
+	 * WRITE RPCs; if the backend restarts between them, COMMIT's
+	 * verifier may not cover write1, and Windows does not retry that
+	 * write1 when the COMMIT verifier is inconsistent with it.
+	 */
+	bool force_sync = (op_ctx->export_perms.options &
+			   EXPORT_OPTION_COMMIT) || nfs_DropDelayErrors();
 	WRITE3resfail *resfail = &res->res_write3.WRITE3res_u.resfail;
 	WRITE3resok *resok = &res->res_write3.WRITE3res_u.resok;
 	struct nfs3_write_data *write_data = NULL;

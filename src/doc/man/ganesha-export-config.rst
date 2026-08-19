@@ -225,7 +225,9 @@ PrefWrite (64*1024*1024)
 DropDelayErrors (default unused)
     For NFSv3, whether to drop rather than reply to requests yielding
     delay errors. If unused, the NFS_CORE_PARAM Drop_Delay_Errors setting
-    is used. This option is dynamically updateable.
+    is used. When effective, NFSv3 UNSTABLE WRITE requests are also
+    treated as synchronous (FILE_SYNC) writes. This option is
+    dynamically updateable.
 
 PrefReaddir (16384)
    The preferred readdir size on this export
