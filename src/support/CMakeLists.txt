@@ -93,6 +93,15 @@ if(ERROR_INJECTION)
     )
 endif(ERROR_INJECTION)
 
+if(ENABLE_FAULT_INJECTION)
+  # Pure-C fail-point registry. The civetweb HTTP control server that drives it
+  # lives in the C++ monitoring module (monitoring/fault_control.cc).
+  set(support_STAT_SRCS
+    ${support_STAT_SRCS}
+    fail_inject.c
+    )
+endif(ENABLE_FAULT_INJECTION)
+
 add_library(support OBJECT ${support_STAT_SRCS})
 add_sanitizers(support)
 set_target_properties(support PROPERTIES COMPILE_FLAGS "-fPIC")
