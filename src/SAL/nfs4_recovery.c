@@ -43,6 +43,7 @@
 #include <dlfcn.h>
 #include "bsd-base64.h"
 #include "client_mgr.h"
+#include "service_ip_mgr.h"
 #include "fsal.h"
 #include <arpa/inet.h>
 
@@ -260,6 +261,7 @@ int nfs_start_grace(nfs_grace_start_t *gsp)
 			 "NFS Server recovery event EVENT_RELEASE_IP nodeid %d ip %s",
 			 gsp->nodeid, gsp->ipaddr);
 		nfs_release_v4_clients(gsp->ipaddr);
+		gsh_service_ip_release(gsp->ipaddr);
 		return ret;
 	}
 
