@@ -58,6 +58,7 @@
 #include "nfs_dupreq.h"
 #include "nfs_file_handle.h"
 #include "client_mgr.h"
+#include "service_ip_mgr.h"
 #include "export_mgr.h"
 #include "server_stats.h"
 #include "uid2grp.h"
@@ -1102,9 +1103,24 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			 reqdata->svc.rq_msg.cb_vers,
 			 reqdata->svc.rq_msg.cb_proc);
 	} else {
+		bool log_first_rpc = false;
+		char service_ip[SOCK_NAME_MAX];
+
 		/* Set the Client IP for this thread */
 		SetClientIP(op_ctx->client->hostaddr_str);
 		client_ip = op_ctx->client->hostaddr_str;
+		log_first_rpc = gsh_service_ip_sync_generation(
+			svc_getrpclocal(reqdata->svc.rq_xprt),
+			&op_ctx->client->vip_generation);
+		if (!sprint_sockip(svc_getrpclocal(reqdata->svc.rq_xprt),
+				    service_ip, sizeof(service_ip))) {
+			(void)strlcpy(service_ip, "<unknown>", sizeof(service_ip));
+		}
+		if (log_first_rpc) {
+			LogInfo(COMPONENT_DISPATCH,
+				"First RPC from client %s service IP %s",
+				client_ip, service_ip);
+		}
 		LogDebug(COMPONENT_DISPATCH,
 			 "Request from %s for Program %" PRIu32
 			 ", Version %" PRIu32

@@ -244,6 +244,7 @@ static void sfs_cluster_read_clids(nfs_grace_start_t *gsp,
 		assert(gsp->event == EVENT_TAKE_IP);
 		// rust will panic if take ip failed
 		sfs_take_vip(gsp->ipaddr);
+		gsh_service_ip_take(gsp->ipaddr);
 	}
 
 	const char* recov_tag = NULL;
