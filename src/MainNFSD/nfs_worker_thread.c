@@ -1102,9 +1102,21 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 			 reqdata->svc.rq_msg.cb_vers,
 			 reqdata->svc.rq_msg.cb_proc);
 	} else {
+		bool log_first_rpc = false;
+
 		/* Set the Client IP for this thread */
 		SetClientIP(op_ctx->client->hostaddr_str);
 		client_ip = op_ctx->client->hostaddr_str;
+		PTHREAD_RWLOCK_wrlock(&op_ctx->client->client_lock);
+		if (!op_ctx->client->first_rpc_logged) {
+			op_ctx->client->first_rpc_logged = true;
+			log_first_rpc = true;
+		}
+		PTHREAD_RWLOCK_unlock(&op_ctx->client->client_lock);
+		if (log_first_rpc) {
+			LogInfo(COMPONENT_DISPATCH,
+				"First RPC from client %s", client_ip);
+		}
 		LogDebug(COMPONENT_DISPATCH,
 			 "Request from %s for Program %" PRIu32
 			 ", Version %" PRIu32

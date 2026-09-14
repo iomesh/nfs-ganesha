@@ -159,7 +159,7 @@ void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 			(void)strlcpy(hostaddr_str, "<unknown>",
 						  sizeof(hostaddr_str));
 		}
-		LogInfo(COMPONENT_HASHTABLE,
+		LogFullDebug(COMPONENT_HASHTABLE,
 			"service_ip_mgr add service_ip %s to slot %d",
 			hostaddr_str,
 			eip_cache_offsetof(&service_stats_by_ip, hash));
@@ -194,7 +194,7 @@ lookup_gsh_service_ip_stats(in_addr_t ipv4addr)
 	if (node) {
 		v.ipv4addr = ipv4addr;
 		if (service_ip_cmpf(&v.node_k, node) == 0) {
-			LogDebug(COMPONENT_HASHTABLE_CACHE,
+			LogFullDebug(COMPONENT_HASHTABLE_CACHE,
 				"service_ip_mgr cache hit slot %d",
 				eip_cache_offsetof(&service_stats_by_ip, hash));
 			stats = avltree_container_of(node,
