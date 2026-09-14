@@ -97,13 +97,13 @@ static int service_ip_cmpf(const struct avltree_node *lhs,
 		return 1;
 }
 
-void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
+static struct service_ip_stats *
+get_or_create_gsh_service_ip_stats(sockaddr_t *service_ipv4addr)
 {
 	struct avltree_node *node = NULL;
 	struct service_ip_stats *stats;
 	struct service_ip_stats v;
 	void **cache_slot;
-	int64_t inflight_count;
 	in_addr_t ipv4addr = get_ip_addr(service_ipv4addr);
 	uint64_t hash = ipv4addr;
 
@@ -111,7 +111,7 @@ void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 		LogDebug(COMPONENT_DISPATCH,
 			"failed to parse ipv4addr, invalid ss_family %u or not IPv4-mapped IPv6",
 			service_ipv4addr->ss_family);
-		return;
+		return NULL;
 	}
 
 	PTHREAD_RWLOCK_rdlock(&service_stats_by_ip.sip_lock);
@@ -159,7 +159,7 @@ void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 			(void)strlcpy(hostaddr_str, "<unknown>",
 						  sizeof(hostaddr_str));
 		}
-		LogInfo(COMPONENT_HASHTABLE,
+		LogFullDebug(COMPONENT_HASHTABLE,
 			"service_ip_mgr add service_ip %s to slot %d",
 			hostaddr_str,
 			eip_cache_offsetof(&service_stats_by_ip, hash));
@@ -169,10 +169,24 @@ void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 
 out:
 	PTHREAD_RWLOCK_unlock(&service_stats_by_ip.sip_lock);
+	return stats;
+}
 
-	inflight_count = atomic_inc_int64_t(&stats->inflight_count);
+void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
+{
+	struct service_ip_stats *stats =
+		get_or_create_gsh_service_ip_stats(service_ipv4addr);
+
+	if (stats == NULL)
+		return;
+
 #ifdef USE_MONITORING
+	in_addr_t ipv4addr = get_ip_addr(service_ipv4addr);
+	int64_t inflight_count = atomic_inc_int64_t(&stats->inflight_count);
+
 	monitoring_service_ip_rpcs_in_flight(ipv4addr, inflight_count);
+#else
+	(void)atomic_inc_int64_t(&stats->inflight_count);
 #endif
 }
 
@@ -194,7 +208,7 @@ lookup_gsh_service_ip_stats(in_addr_t ipv4addr)
 	if (node) {
 		v.ipv4addr = ipv4addr;
 		if (service_ip_cmpf(&v.node_k, node) == 0) {
-			LogDebug(COMPONENT_HASHTABLE_CACHE,
+			LogFullDebug(COMPONENT_HASHTABLE_CACHE,
 				"service_ip_mgr cache hit slot %d",
 				eip_cache_offsetof(&service_stats_by_ip, hash));
 			stats = avltree_container_of(node,
@@ -219,9 +233,63 @@ out:
 	return stats;
 }
 
+bool gsh_service_ip_first_rpc_client(sockaddr_t *service_ipaddr,
+				     sockaddr_t *client_ipaddr)
+{
+	struct service_ip_stats *stats;
+	uint32_t i;
+	bool first_rpc = false;
+
+	if (client_ipaddr == NULL)
+		return false;
+
+	stats = get_or_create_gsh_service_ip_stats(service_ipaddr);
+	if (stats == NULL)
+		return false;
+
+	PTHREAD_RWLOCK_wrlock(&service_stats_by_ip.sip_lock);
+	for (i = 0; i < stats->first_rpc_client_count; i++) {
+		if (sockaddr_cmpf(&stats->first_rpc_clients[i], client_ipaddr,
+				  true) == 0)
+			goto out;
+	}
+
+	if (stats->first_rpc_client_count == SERVICE_IP_MAX_TRACKED_CLIENTS)
+		goto out;
+
+	stats->first_rpc_clients[stats->first_rpc_client_count++] =
+		*client_ipaddr;
+	first_rpc = true;
+out:
+	PTHREAD_RWLOCK_unlock(&service_stats_by_ip.sip_lock);
+	return first_rpc;
+}
+
+void gsh_service_ip_take(const char *service_ip)
+{
+	sockaddr_t service_ipaddr = {0};
+	struct sockaddr_in *sin = (struct sockaddr_in *)&service_ipaddr;
+	struct service_ip_stats *stats;
+
+	sin->sin_family = AF_INET;
+	if (inet_pton(AF_INET, service_ip, &sin->sin_addr) != 1) {
+		LogWarn(COMPONENT_HASHTABLE,
+			"cannot clear first RPC clients for invalid service IP %s",
+			service_ip);
+		return;
+	}
+
+	stats = get_or_create_gsh_service_ip_stats(&service_ipaddr);
+	if (stats == NULL)
+		return;
+
+	PTHREAD_RWLOCK_wrlock(&service_stats_by_ip.sip_lock);
+	stats->first_rpc_client_count = 0;
+	PTHREAD_RWLOCK_unlock(&service_stats_by_ip.sip_lock);
+}
+
 void dec_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 {
-	int64_t inflight_count;
 	struct service_ip_stats *stats;
 	in_addr_t ipv4addr = get_ip_addr(service_ipv4addr);
 
@@ -247,9 +315,12 @@ void dec_gsh_service_ip_inflight_count(sockaddr_t *service_ipv4addr)
 		return;  /* It never comes here */
 	}
 
-	inflight_count = atomic_dec_int64_t(&stats->inflight_count);
 #ifdef USE_MONITORING
+	int64_t inflight_count = atomic_dec_int64_t(&stats->inflight_count);
+
 	monitoring_service_ip_rpcs_in_flight(ipv4addr, inflight_count);
+#else
+	(void)atomic_dec_int64_t(&stats->inflight_count);
 #endif
 }
 
