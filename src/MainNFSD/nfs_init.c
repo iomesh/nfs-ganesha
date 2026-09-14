@@ -1048,7 +1048,7 @@ void nfs_start(nfs_start_info_t *p_start_info)
 	/* Regular exit */
 	LogEvent(COMPONENT_MAIN, "NFS EXIT: regular exit");
 
-	nfs_init_cleanup();
+	// nfs_init_cleanup();
 
 	Cleanup();
 	/* let main return 0 to exit */
