@@ -52,6 +52,8 @@ struct gsh_client {
 	struct avltree_node node_k;
 	pthread_rwlock_t client_lock;
 	int64_t refcnt;
+	/* One VIP per client; guarded by the service IP manager lock. */
+	uint64_t vip_generation;
 	struct timespec last_update;
 	char hostaddr_str[SOCK_NAME_MAX];
 	sockaddr_t cl_addrbuf;

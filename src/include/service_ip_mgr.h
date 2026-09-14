@@ -49,14 +49,22 @@
 
 struct service_ip_stats {
 	struct avltree_node node_k;
-	int64_t inflight_count;
 	in_addr_t ipv4addr;
+	int64_t inflight_count;
+	uint64_t generation;
+	/* Protected by service_stats_by_ip.sip_lock. */
+	bool taken;
 };
 
 void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipaddr);
 void dec_gsh_service_ip_inflight_count(sockaddr_t *service_ipaddr);
 
 int64_t get_gsh_service_ip_inflight_count(in_addr_t service_ipv4addr);
+/* Synchronize the supplied generation; return true if it changed. */
+bool gsh_service_ip_sync_generation(sockaddr_t *service_ipaddr,
+				    uint64_t *generation);
+void gsh_service_ip_take(const char *service_ip);
+void gsh_service_ip_release(const char *service_ip);
 
 void service_ip_pkginit(void);
 
