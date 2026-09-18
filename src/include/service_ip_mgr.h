@@ -47,16 +47,23 @@
 #include "avltree.h"
 #include "gsh_types.h"
 
+#define SERVICE_IP_MAX_TRACKED_CLIENTS 1024
+
 struct service_ip_stats {
 	struct avltree_node node_k;
 	int64_t inflight_count;
 	in_addr_t ipv4addr;
+	uint32_t first_rpc_client_count;
+	sockaddr_t first_rpc_clients[SERVICE_IP_MAX_TRACKED_CLIENTS];
 };
 
 void inc_gsh_service_ip_inflight_count(sockaddr_t *service_ipaddr);
 void dec_gsh_service_ip_inflight_count(sockaddr_t *service_ipaddr);
 
 int64_t get_gsh_service_ip_inflight_count(in_addr_t service_ipv4addr);
+bool gsh_service_ip_first_rpc_client(sockaddr_t *service_ipaddr,
+				     sockaddr_t *client_ipaddr);
+void gsh_service_ip_take(const char *service_ip);
 
 void service_ip_pkginit(void);
 
