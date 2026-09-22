@@ -406,18 +406,54 @@ enum nfs_req_result nfs4_op_write(struct nfs_argop4 *op, compound_data_t *data,
 		anonymous_started = true;
 	}
 
+	/* Get the characteristics of the I/O to be made */
+	offset = arg_WRITE4->offset;
+	size = arg_WRITE4->data.data_len;
+
 	/* Need to permission check the write. */
-	fsal_status = obj->obj_ops->test_access(obj, FSAL_WRITE_ACCESS,
-					       NULL, NULL, true);
+	{
+		struct fsal_attrlist write_attrs;
+		fsal_accessflags_t write_access = 0;
+
+		/*
+		 * Per RFC 8881, WRITE permission depends on offset vs file size:
+		 * MODIFY (WRITE_DATA) inside EOF, EXTEND (APPEND_DATA) at/after
+		 * EOF. Empty file: offset 0 >= size 0 -> EXTEND.
+		 *
+		 * FSAL_OPEN/EXTEND_WRITE_ACCESS: fsal_test_access uses ACE when
+		 * attrs.acl is set, mode when not — one call, no second mode
+		 * check that would broaden access beyond ACE.  owner_skip=true
+		 * models POSIX open-file behavior: the file owner keeps write access
+		 * on an already-open file even if mode/ACL later removes it.
+		 */
+		fsal_prepare_attrs(&write_attrs, ATTR_SIZE);
+		fsal_status = obj->obj_ops->getattrs(obj, &write_attrs);
+		if (FSAL_IS_ERROR(fsal_status)) {
+			res_WRITE4->status = nfs4_Errno_status(fsal_status);
+			fsal_release_attrs(&write_attrs);
+			goto out;
+		}
+
+		if (offset >= write_attrs.filesize) {
+			/* EXTEND: append at EOF (includes size == 0). */
+			write_access = FSAL_EXTEND_WRITE_ACCESS;
+		}
+		else if (offset + size > write_attrs.filesize) {
+			write_access = FSAL_OPEN_WRITE_ACCESS | FSAL_EXTEND_WRITE_ACCESS;
+		}
+		else{
+			write_access = FSAL_OPEN_WRITE_ACCESS;
+		}
+
+		fsal_status = obj->obj_ops->test_access(obj, write_access,
+						       NULL, NULL, true);
+		fsal_release_attrs(&write_attrs);
+	}
 
 	if (FSAL_IS_ERROR(fsal_status)) {
 		res_WRITE4->status = nfs4_Errno_status(fsal_status);
 		goto out;
 	}
-
-	/* Get the characteristics of the I/O to be made */
-	offset = arg_WRITE4->offset;
-	size = arg_WRITE4->data.data_len;
 	LogFullDebug(COMPONENT_NFS_V4,
 		     "offset = %" PRIu64 "  length = %" PRIu64 "  stable = %d",
 		     offset, size, arg_WRITE4->stable);
