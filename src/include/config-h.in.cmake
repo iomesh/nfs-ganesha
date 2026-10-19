@@ -120,6 +120,7 @@
 #cmakedefine USE_MONITORING 1
 #cmakedefine USE_MINITRACE 1
 #cmakedefine ENABLE_SFS 1
+#cmakedefine ENABLE_FAULT_INJECTION 1
 #define NFS_GANESHA 1
 
 #define GANESHA_CONFIG_PATH "@SYSCONFDIR@/ganesha/ganesha.conf"
