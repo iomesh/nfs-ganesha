@@ -1009,6 +1009,14 @@ void nfs_start(nfs_start_info_t *p_start_info)
 
 		build_verifier.epoch = get_unique_server_id();
 
+		LogEvent(COMPONENT_INIT,
+			 "NFS serverid = 0x%08" PRIx64 " (%" PRIu64
+			 "), source = %s",
+			 build_verifier.epoch, build_verifier.epoch,
+			 nfs_param.core_param.unique_server_id != 0
+				 ? "Unique_Server_Id"
+				 : "nfs_ServerEpoch");
+
 		memcpy(NFS3_write_verifier, build_verifier.NFS3_write_verifier,
 		       sizeof(NFS3_write_verifier));
 		memcpy(NFS4_write_verifier, build_verifier.NFS4_write_verifier,
