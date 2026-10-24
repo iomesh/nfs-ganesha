@@ -173,8 +173,8 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 
 	/* Check if lease is expired and reserve it */
 	if (!reserve_lease_or_expire(session->clientid_record, false)) {
-		dec_session_ref(session);
-		res_SEQUENCE4->sr_status = NFS4ERR_EXPIRED;
+		/* Expiring the client also destroys its sessions. */
+		res_SEQUENCE4->sr_status = NFS4ERR_BADSESSION;
 
 		if (isDebug(COMPONENT_SESSIONS) || isDebug(COMPONENT_CLIENTID)) {
 			char client_rec_str[DISPLAY_CLIENT_REC_SIZE] = "\0";
@@ -187,6 +187,7 @@ enum nfs_req_result nfs4_op_sequence(struct nfs_argop4 *op,
 					"session (%s): client lease expired, returning status %s, client {%s}",
 					sessionid_str, nfsstat4_to_str(res_SEQUENCE4->sr_status), client_rec_str);
 		}
+		dec_session_ref(session);
 		return NFS_REQ_ERROR;
 	}
 
