@@ -290,6 +290,11 @@ int nfs3_readdirplus(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 						     &attrs_parent);
 
 		if (parent_dir_obj == NULL) {
+			if (nfs_RetryableError(fsal_status_gethandle.major)) {
+				rc = NFS_REQ_DROP;
+				goto out_destroy;
+			}
+
 			res->res_readdirplus3.status =
 			    nfs3_Errno_status(fsal_status_gethandle);
 			rc = NFS_REQ_OK;
