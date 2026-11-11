@@ -106,7 +106,7 @@ int display_session_id_key(struct display_buffer *dspbuf,
 
 int display_session(struct display_buffer *dspbuf, nfs41_session_t *session)
 {
-	int b_left = display_printf(dspbuf, "session {%p", session);
+	int b_left = display_printf(dspbuf, "session {%p ", session);
 
 	if (b_left > 0)
 		b_left = display_session_id(dspbuf, session->session_id);

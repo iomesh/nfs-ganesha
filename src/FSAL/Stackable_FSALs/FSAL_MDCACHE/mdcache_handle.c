@@ -629,6 +629,19 @@ static fsal_status_t mdcache_test_access(struct fsal_obj_handle *obj_hdl,
 	mdcache_entry_t *entry =
 		container_of(obj_hdl, mdcache_entry_t, obj_handle);
 
+	/* Delegate to a custom FSAL test_access  without the mdcache 
+	 * owner_skip cache shortcut — cached attrs may be stale. */
+	if (entry->sub_handle->obj_ops->test_access != fsal_test_access) {
+		fsal_status_t status;
+
+		subcall(
+			status = entry->sub_handle->obj_ops->test_access(
+				entry->sub_handle, access_type, allowed,
+				denied, owner_skip);
+		);
+		return status;
+	}
+
 	if (owner_skip && entry->attrs.owner == op_ctx->creds.caller_uid)
 		return fsalstat(ERR_FSAL_NO_ERROR, 0);
 
