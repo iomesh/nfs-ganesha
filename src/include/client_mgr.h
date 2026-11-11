@@ -57,6 +57,10 @@ struct gsh_client {
 	struct timespec last_update;
 	char hostaddr_str[SOCK_NAME_MAX];
 	sockaddr_t cl_addrbuf;
+#ifdef USE_MONITORING
+	/* Initialized before publication; protected by owner references. */
+	void *monitoring_metrics;
+#endif
 };
 
 static inline int64_t inc_gsh_client_refcount(struct gsh_client *client)

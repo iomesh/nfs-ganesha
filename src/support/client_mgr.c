@@ -62,6 +62,9 @@
 #include "gsh_dbus.h"
 #endif
 #include "client_mgr.h"
+#ifdef USE_MONITORING
+#include "monitoring.h"
+#endif
 #include "export_mgr.h"
 #include "server_stats_private.h"
 #include "abstract_atomic.h"
@@ -192,6 +195,9 @@ struct gsh_client *get_gsh_client(sockaddr_t *client_ipaddr, bool lookup_only)
 		cl = avltree_container_of(node, struct gsh_client, node_k);
 	} else {
 		PTHREAD_RWLOCK_init(&cl->client_lock, NULL);
+#ifdef USE_MONITORING
+		monitoring_client_metrics_init(cl);
+#endif
 		/* update cache */
 		atomic_store_voidptr(cache_slot, &cl->node_k);
 	}
@@ -266,6 +272,9 @@ int remove_gsh_client(sockaddr_t *client_ipaddr)
 		server_stats_free(&server_st->st);
 		server_stats_allops_free(&server_st->c_all);
 		PTHREAD_RWLOCK_destroy(&cl->client_lock);
+#ifdef USE_MONITORING
+		monitoring_client_metrics_release(cl);
+#endif
 		gsh_free(server_st);
 	}
 	return removed;

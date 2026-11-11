@@ -22,6 +22,12 @@
 
 #include <unistd.h>
 
+#include <array>
+#include <tuple>
+#include <string_view>
+#include <mutex>
+#include <atomic>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <memory>
@@ -39,6 +45,8 @@
 #include "monitoring.h"
 #include "nfs_convert.h"
 #include "log.h"
+#include "client_mgr.h"
+#include "export_mgr.h"
 
 #include "monitoring_internal.h"
 
@@ -78,10 +86,10 @@ class Metrics {
   prometheus::Family<prometheus::Counter> &mdcacheCacheMissesTotal;
   prometheus::Family<prometheus::Counter> &mdcacheCacheHitsByExportTotal;
   prometheus::Family<prometheus::Counter> &mdcacheCacheMissesByExportTotal;
-  prometheus::Family<prometheus::Counter> &attrsGetHitsTotal;
-  prometheus::Family<prometheus::Counter> &attrsGetMissMaskTotal;
-  prometheus::Family<prometheus::Counter> &rpcsReceivedTotal;
-  prometheus::Family<prometheus::Counter> &rpcsCompletedTotal;
+  prometheus::Counter &attrsGetHitsTotal;
+  prometheus::Counter &attrsGetMissMaskTotal;
+  prometheus::Counter &rpcsReceivedTotal;
+  prometheus::Counter &rpcsCompletedTotal;
   prometheus::Family<prometheus::Counter> &errorsByVersionOperationStatus;
 
   // Per client metrics.
@@ -93,6 +101,7 @@ class Metrics {
 
   // Gauges
   prometheus::Family<prometheus::Gauge> &rpcsInFlight;
+  prometheus::Gauge &totalRpcsInFlight;
   prometheus::Family<prometheus::Gauge> &lastClientUpdate;
 
   // Per {operation} NFS request metrics.
@@ -138,22 +147,26 @@ Metrics::Metrics(prometheus::Registry &registry) :
       prometheus::BuildCounter()
       .Name("attrs_get_hit_total")
       .Help("attrs_table get hits (entry present and mask sufficient).")
-      .Register(registry)),
+      .Register(registry)
+      .Add({})),
   attrsGetMissMaskTotal(
       prometheus::BuildCounter()
       .Name("attrs_get_miss_mask_total")
       .Help("attrs_table get misses due to insufficient attr mask.")
-      .Register(registry)),
+      .Register(registry)
+      .Add({})),
   rpcsReceivedTotal(
       prometheus::BuildCounter()
       .Name("rpcs_received_total")
       .Help("Counter for total RPCs received.")
-      .Register(registry)),
+      .Register(registry)
+      .Add({})),
   rpcsCompletedTotal(
       prometheus::BuildCounter()
       .Name("rpcs_completed_total")
       .Help("Counter for total RPCs completed.")
-      .Register(registry)),
+      .Register(registry)
+      .Add({})),
   errorsByVersionOperationStatus(
       prometheus::BuildCounter()
       .Name("nfs_errors_total")
@@ -183,6 +196,7 @@ Metrics::Metrics(prometheus::Registry &registry) :
       .Name("rpcs_in_flight")
       .Help("Number of NFS requests received or in flight.")
       .Register(registry)),
+  totalRpcsInFlight(rpcsInFlight.Add({})),
   lastClientUpdate(
       prometheus::BuildGauge()
       .Name("last_client_update")
@@ -293,6 +307,8 @@ class SimpleMap {
         std::map<K, T> map_;
 };
 
+static std::atomic<uint64_t> exportLabelGeneration{1};
+
 static SimpleMap<export_id_t, std::string> exportLabels([](const export_id_t& export_id){
     std::ostringstream ss;
     ss << "export_id=" << export_id;
@@ -316,10 +332,11 @@ static SimpleMap<in_addr_t, std::string> ip2str([](const in_addr_t& ip_addr){
 std::unique_ptr<prometheus::Exposer> exposer;
 std::shared_ptr<prometheus::Registry> registry;
 
-static std::string trimIPv6Prefix(const std::string& input) {
-  const std::string prefix("::ffff:");
-  if (input.find(prefix) == 0) {
-    return input.substr(prefix.size());
+static const char *trimIPv6Prefix(const char *input) {
+  static constexpr char prefix[] = "::ffff:";
+  constexpr size_t prefixSize = sizeof(prefix) - 1;
+  if (strncmp(input, prefix, prefixSize) == 0) {
+    return input + prefixSize;
   }
   return input;
 }
@@ -328,66 +345,202 @@ static void toLowerCase(std::string &s) {
   transform(s.begin(), s.end(), s.begin(), ::tolower);
 }
 
-static void observeNfsRequest(const char *operation,
-                              const nsecs_elapsed_t request_time,
-                              const char *version,
-                              const char *statusLabel,
-                              const export_id_t export_id,
-                              const char *fullpath,
-                              const in_addr_t service_ip,
-                              const char *client_ip) {
-  const double latency_ms = (double)request_time / NS_PER_MSEC;
-  std::string operationLowerCase = std::string(operation);
-  toLowerCase(operationLowerCase);
-  if (client_ip != NULL) {
-    std::string client(client_ip);
-    int64_t epoch =
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-    client = trimIPv6Prefix(client);
-    metrics->clientRequestsTotal
-        .Add({{kClient, client},
-              {kOperation, operationLowerCase}})
-        .Increment();
-    std::string server_ip = ip2str.GetOrInsert(service_ip);
-    if (export_id != 0 && fullpath != NULL && strlen(fullpath) > 1
-        && !server_ip.empty()) {
-      metrics->lastClientUpdate
-          .Add({{kClient, client},
-                {kServer, server_ip},
-                {kExport, std::to_string(export_id)},
-                {kExportName, fullpath + 1}, // skip the beginning '/'
-                {kVersion, version}})
-          .Set(epoch);
+// Protocol operation numbers are finite; clients do not consume these slots.
+static constexpr size_t nfs3OperationSlots = NFSPROC3_COMMIT + 1;
+static constexpr size_t requestOperationSlots = nfs3OperationSlots + NFS4_OP_LAST_ONE;
+
+struct NfsOperationMetrics {
+  std::string operation;
+  prometheus::Counter *requests = nullptr;
+  prometheus::Histogram *latency = nullptr;
+  std::map<std::pair<std::string_view, std::string_view>, prometheus::Counter *> errors;
+};
+
+static NfsOperationMetrics &GetOperationMetrics(size_t slot, const char *operation) {
+  static thread_local std::array<NfsOperationMetrics, requestOperationSlots> cache;
+  auto &entry = cache[slot];
+  if (entry.requests == nullptr) {
+    entry.operation = operation;
+    toLowerCase(entry.operation);
+    entry.requests = &metrics->requestsTotalByOperation.Add({{kOperation, entry.operation}});
+    entry.latency = &metrics->latencyByOperation.Add({{kOperation, entry.operation}}, latencyBuckets);
+  }
+  return entry;
+}
+
+using UpdateKey = std::tuple<in_addr_t, export_id_t, std::string, std::string>;
+struct UpdateGauge {
+  const UpdateKey *key;
+  prometheus::Gauge *gauge;
+};
+struct ClientMetricHandles {
+  explicit ClientMetricHandles(const char *address) : label(trimIPv6Prefix(address)) {
+    for (auto &entry : requests) {
+      entry.store(nullptr, std::memory_order_relaxed);
     }
   }
-  metrics->errorsByVersionOperationStatus
-      .Add({{kVersion, version},
-            {kOperation, operationLowerCase},
-            {kStatus, statusLabel}})
-      .Increment();
+  const std::string label;
+  std::array<std::atomic<prometheus::Counter *>, requestOperationSlots> requests;
+  std::mutex registration;
+  std::map<UpdateKey, std::unique_ptr<UpdateGauge>> updates;
+  std::atomic<UpdateGauge *> lastUpdate{nullptr};
+};
 
-  // Observe metrics.
-  metrics->requestsTotalByOperation
-    .Add({{kOperation, operationLowerCase}})
-    .Increment();
-  metrics->latencyByOperation
-    .Add({{kOperation, operationLowerCase}}, latencyBuckets)
-    .Observe(latency_ms);
+static ClientMetricHandles &GetClientMetrics(struct gsh_client *client) {
+  if (client == nullptr) {
+    static ClientMetricHandles unknown("");
+    return unknown;
+  }
+  return *static_cast<ClientMetricHandles *>(client->monitoring_metrics);
+}
 
+static prometheus::Counter &ClientRequestCounter(ClientMetricHandles &client,
+                                                 size_t slot,
+                                                 const std::string &operation) {
+  auto *counter = client.requests[slot].load(std::memory_order_acquire);
+  if (counter == nullptr) {
+    std::lock_guard<std::mutex> lock(client.registration);
+    counter = client.requests[slot].load(std::memory_order_relaxed);
+    if (counter == nullptr) {
+      counter = &metrics->clientRequestsTotal.Add({{kClient, client.label},
+                                                   {kOperation, operation}});
+      client.requests[slot].store(counter, std::memory_order_release);
+    }
+  }
+  return *counter;
+}
+
+static prometheus::Gauge &ClientUpdateGauge(ClientMetricHandles &client,
+                                            in_addr_t server, export_id_t exportId,
+                                            const char *path, const char *version) {
+  auto *cached = client.lastUpdate.load(std::memory_order_acquire);
+  if (cached != nullptr && std::get<0>(*cached->key) == server &&
+      std::get<1>(*cached->key) == exportId && std::get<2>(*cached->key) == path &&
+      std::get<3>(*cached->key) == version) {
+    return *cached->gauge;
+  }
+  std::lock_guard<std::mutex> lock(client.registration);
+  UpdateKey key{server, exportId, path, version};
+  auto found = client.updates.find(key);
+  if (found == client.updates.end()) {
+    auto &gauge = metrics->lastClientUpdate.Add({
+        {kClient, client.label}, {kServer, ip2str.GetOrInsert(server)},
+        {kExport, std::to_string(exportId)}, {kExportName, path}, {kVersion, version}});
+    found = client.updates.emplace(std::move(key), std::make_unique<UpdateGauge>()).first;
+    found->second->key = &found->first;
+    found->second->gauge = &gauge;
+  }
+  cached = found->second.get();
+  client.lastUpdate.store(cached, std::memory_order_release);
+  return *cached->gauge;
+}
+
+struct ExportOperationMetrics {
+  prometheus::Counter *requests;
+  prometheus::Histogram *latency;
+};
+struct ExportLabelMetrics {
+  explicit ExportLabelMetrics(std::string value) : label(std::move(value)) {
+    for (auto &entry : operations) {
+      entry.store(nullptr, std::memory_order_relaxed);
+    }
+  }
+  ~ExportLabelMetrics() {
+    for (auto &entry : operations) {
+      delete entry.load(std::memory_order_relaxed);
+    }
+  }
+  const std::string label;
+  std::array<std::atomic<ExportOperationMetrics *>, requestOperationSlots> operations;
+};
+struct ExportMetricHandles {
+  std::mutex registration;
+  std::map<std::string, std::unique_ptr<ExportLabelMetrics>> labels;
+  std::atomic<ExportLabelMetrics *> current{nullptr};
+  std::atomic<uint64_t> generation{0};
+};
+
+static ExportOperationMetrics &ExportRequestMetrics(ExportMetricHandles &exportMetrics,
+                                                    export_id_t exportId,
+                                                    size_t slot,
+                                                    const std::string &operation) {
+  uint64_t generation = exportLabelGeneration.load(std::memory_order_acquire);
+  const uint64_t observed = exportMetrics.generation.load(std::memory_order_acquire);
+  auto *label = exportMetrics.current.load(std::memory_order_acquire);
+  if (label == nullptr || observed != generation) {
+    std::lock_guard<std::mutex> lock(exportMetrics.registration);
+    generation = exportLabelGeneration.load(std::memory_order_acquire);
+    if (exportMetrics.current.load(std::memory_order_relaxed) == nullptr ||
+        exportMetrics.generation.load(std::memory_order_relaxed) != generation) {
+      const std::string name = GetExportLabel(exportId);
+      auto &entry = exportMetrics.labels[name];
+      if (!entry) {
+        entry = std::make_unique<ExportLabelMetrics>(name);
+      }
+      exportMetrics.current.store(entry.get(), std::memory_order_release);
+      exportMetrics.generation.store(generation, std::memory_order_release);
+    }
+    label = exportMetrics.current.load(std::memory_order_relaxed);
+  }
+  auto *entry = label->operations[slot].load(std::memory_order_acquire);
+  if (entry == nullptr) {
+    std::lock_guard<std::mutex> lock(exportMetrics.registration);
+    entry = label->operations[slot].load(std::memory_order_relaxed);
+    if (entry == nullptr) {
+      auto candidate = std::make_unique<ExportOperationMetrics>();
+      candidate->requests = &metrics->requestsTotalByOperationExport.Add(
+          {{kOperation, operation}, {kExport, label->label}});
+      candidate->latency = &metrics->latencyByOperationExport.Add(
+          {{kOperation, operation}, {kExport, label->label}}, latencyBuckets);
+      entry = candidate.release();
+      label->operations[slot].store(entry, std::memory_order_release);
+    }
+  }
+  return *entry;
+}
+
+static void observeNfsRequest(size_t slot, const char *operation,
+                              const nsecs_elapsed_t request_time,
+                              const char *version, const char *statusLabel,
+                              export_id_t export_id, const char *fullpath,
+                              in_addr_t service_ip, struct gsh_client *client,
+                              struct gsh_export *exp) {
+  const double latency_ms = static_cast<double>(request_time) / NS_PER_MSEC;
+  auto &operationMetrics = GetOperationMetrics(slot, operation);
+  auto &clientMetrics = GetClientMetrics(client);
+  ClientRequestCounter(clientMetrics, slot, operationMetrics.operation).Increment();
+  // The IPv4 formatter always returns nonempty text (including its fallback).
+  // Resolve the address only when a new last-update label set is registered.
+  if (export_id != 0 && fullpath != nullptr && strlen(fullpath) > 1) {
+    const int64_t epoch = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    ClientUpdateGauge(clientMetrics, service_ip, export_id, fullpath + 1, version).Set(epoch);
+  }
+  auto key = std::make_pair(std::string_view(version), std::string_view(statusLabel));
+  auto found = operationMetrics.errors.find(key);
+  if (found == operationMetrics.errors.end()) {
+    auto &counter = metrics->errorsByVersionOperationStatus.Add(
+        {{kVersion, version}, {kOperation, operationMetrics.operation}, {kStatus, statusLabel}});
+    found = operationMetrics.errors.emplace(key, &counter).first;
+  }
+  found->second->Increment();
+  operationMetrics.requests->Increment();
+  operationMetrics.latency->Observe(latency_ms);
   if (export_id == 0) {
     return;
   }
-
-  // Observe metrics, by export.
-  const std::string exportLabel = GetExportLabel(export_id);
-  metrics->requestsTotalByOperationExport
-    .Add({{kOperation, operationLowerCase}, {kExport, exportLabel}})
-    .Increment();
-  metrics->latencyByOperationExport
-    .Add({{kOperation, operationLowerCase},
-          {kExport, exportLabel}}, latencyBuckets)
-    .Observe(latency_ms);
+  if (exp != nullptr && exp->export_id == export_id) {
+    auto &exportMetrics = *static_cast<ExportMetricHandles *>(exp->monitoring_metrics);
+    auto &handles = ExportRequestMetrics(exportMetrics, export_id, slot, operationMetrics.operation);
+    handles.requests->Increment();
+    handles.latency->Observe(latency_ms);
+  } else {
+    const std::string label = GetExportLabel(export_id);
+    metrics->requestsTotalByOperationExport.Add(
+        {{kOperation, operationMetrics.operation}, {kExport, label}}).Increment();
+    metrics->latencyByOperationExport.Add(
+        {{kOperation, operationMetrics.operation}, {kExport, label}}, latencyBuckets).Observe(latency_ms);
+  }
 }
 
 /*
@@ -396,9 +549,32 @@ static void observeNfsRequest(const char *operation,
 
 extern "C" {
 
+/* Construct the cache before the owner becomes visible to requests.
+ * No Registry access is needed until the first metric update. */
+void monitoring_client_metrics_init(struct gsh_client *client) {
+  client->monitoring_metrics = new ClientMetricHandles(client->hostaddr_str);
+}
+
+void monitoring_export_metrics_init(struct gsh_export *exp) {
+  exp->monitoring_metrics = new ExportMetricHandles;
+}
+
+/* Object managers call these only after the final request reference is gone.
+ * Delete the handle owner, not the Registry-owned metric series. */
+void monitoring_client_metrics_release(struct gsh_client *client) {
+  delete static_cast<ClientMetricHandles *>(client->monitoring_metrics);
+  client->monitoring_metrics = nullptr;
+}
+
+void monitoring_export_metrics_release(struct gsh_export *exp) {
+  delete static_cast<ExportMetricHandles *>(exp->monitoring_metrics);
+  exp->monitoring_metrics = nullptr;
+}
+
 void monitoring_register_export_label(const export_id_t export_id,
                                       const char *label) {
   exportLabels.InsertOrUpdate(export_id, std::string(label));
+  exportLabelGeneration.fetch_add(1, std::memory_order_release);
 }
 
 void monitoring_init(const uint16_t port) {
@@ -423,15 +599,17 @@ void monitoring_nfs3_request(const uint32_t proc,
                              const export_id_t export_id,
                              const char *fullpath,
                              const in_addr_t service_ip,
-                             const char *client_ip) {
+                             struct gsh_client *client,
+                             struct gsh_export *exp) {
   const char *version = "NFSv3";
   const char *operation = nfsproc3_to_str(proc);
   const char *statusLabel = result == NFS_REQ_OK ?
     nfsstat3_to_str(status) :
     nfs_req_result_to_str(result);
 
-  observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-          fullpath, service_ip, client_ip);
+  const size_t slot = proc <= NFSPROC3_COMMIT ? proc : 0;
+  observeNfsRequest(slot, operation, request_time, version, statusLabel, export_id,
+          fullpath, service_ip, client, exp);
 }
 
 static const char *nfsversion4_to_str(uint32_t minorversion) {
@@ -454,12 +632,14 @@ void monitoring_nfs4_request(const uint32_t op,
                              const export_id_t export_id,
                              const char *fullpath,
                              const in_addr_t service_ip,
-                             const char *client_ip) {
+                             struct gsh_client *client,
+                             struct gsh_export *exp) {
   const char *operation = nfsop4_to_str(op);
   const char *version = nfsversion4_to_str(minor_version);
   const char *statusLabel = nfsstat4_to_str(status);
-  observeNfsRequest(operation, request_time, version, statusLabel, export_id,
-                    fullpath, service_ip, client_ip);
+  const size_t slot = nfs3OperationSlots + (op < NFS4_OP_LAST_ONE ? op : 0);
+  observeNfsRequest(slot, operation, request_time, version, statusLabel, export_id,
+                    fullpath, service_ip, client, exp);
 }
 
 void monitoring_nfs_io(const size_t bytes_requested,
@@ -472,8 +652,7 @@ void monitoring_nfs_io(const size_t bytes_requested,
   const size_t bytes_received = (is_write ? 0 : bytes_transferred);
   const size_t bytes_sent = (is_write ? bytes_transferred : 0);
   if (client_ip != NULL) {
-    std::string client(client_ip);
-    client = trimIPv6Prefix(client);
+    const char *client = trimIPv6Prefix(client_ip);
     metrics->clientBytesReceivedTotal
         .Add({{kClient, client},
               {kOperation, operation}})
@@ -549,32 +728,41 @@ void monitoring_attrs_get_hit(void) {
   if (metrics == nullptr) {
     return;
   }
-  metrics->attrsGetHitsTotal.Add({}).Increment();
+  metrics->attrsGetHitsTotal.Increment();
 }
 
 void monitoring_attrs_get_miss_mask(void) {
   if (metrics == nullptr) {
     return;
   }
-  metrics->attrsGetMissMaskTotal.Add({}).Increment();
+  metrics->attrsGetMissMaskTotal.Increment();
 }
 
 void monitoring_rpc_received() {
-  metrics->rpcsReceivedTotal.Add({}).Increment();
+  metrics->rpcsReceivedTotal.Increment();
 }
 
 void monitoring_rpc_completed() {
-  metrics->rpcsCompletedTotal.Add({}).Increment();
+  metrics->rpcsCompletedTotal.Increment();
 }
 
 void monitoring_rpcs_in_flight(const uint64_t value) {
-  metrics->rpcsInFlight.Add({}).Set(value);
+  metrics->totalRpcsInFlight.Set(value);
 }
 
 void monitoring_service_ip_rpcs_in_flight(const in_addr_t service_ipaddr,
 					  const uint64_t value) {
-  std::string service_ip = ip2str.GetOrInsert(service_ipaddr);
-  metrics->rpcsInFlight.Add({{kServer, service_ip}}).Set(value);
+  // The registry owns stable series for the process lifetime. Retain only the
+  // last address per thread; alternating addresses still resolve their own
+  // labels, without growing a second address registry.
+  static thread_local in_addr_t cachedAddress = 0;
+  static thread_local prometheus::Gauge *gauge = nullptr;
+  if (gauge == nullptr || cachedAddress != service_ipaddr) {
+    std::string service_ip = ip2str.GetOrInsert(service_ipaddr);
+    gauge = &metrics->rpcsInFlight.Add({{kServer, service_ip}});
+    cachedAddress = service_ipaddr;
+  }
+  gauge->Set(value);
 }
 
 }  // extern "C"

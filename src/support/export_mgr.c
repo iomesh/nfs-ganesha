@@ -58,6 +58,9 @@
 #endif
 #include "export_mgr.h"
 #include "client_mgr.h"
+#ifdef USE_MONITORING
+#include "monitoring.h"
+#endif
 #include "server_stats_private.h"
 #include "server_stats.h"
 #include "abstract_atomic.h"
@@ -229,6 +232,9 @@ struct gsh_export *alloc_export(void)
 	export->refcnt = 1;
 
 	PTHREAD_RWLOCK_init(&export->exp_lock, NULL);
+#ifdef USE_MONITORING
+	monitoring_export_metrics_init(export);
+#endif
 
 	return export;
 }
@@ -744,6 +750,9 @@ void _put_gsh_export(struct gsh_export *export, bool config,
 	export_st = container_of(export, struct export_stats, export);
 	server_stats_free(&export_st->st);
 	PTHREAD_RWLOCK_destroy(&export->exp_lock);
+#ifdef USE_MONITORING
+	monitoring_export_metrics_release(export);
+#endif
 	gsh_free(export_st);
 }
 

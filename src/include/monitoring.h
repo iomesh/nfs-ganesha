@@ -40,6 +40,13 @@ extern "C" {
 
 typedef uint16_t export_id_t;
 
+struct gsh_client;
+struct gsh_export;
+void monitoring_client_metrics_init(struct gsh_client *client);
+void monitoring_client_metrics_release(struct gsh_client *client);
+void monitoring_export_metrics_init(struct gsh_export *exp);
+void monitoring_export_metrics_release(struct gsh_export *exp);
+
 /* Allow FSALs to register a human readable label used for per-export metrics.
  * The default label (if the FSAL doesn't set one) is "exportid=<fsid_major>".
  */
@@ -68,7 +75,8 @@ void monitoring_nfs3_request(const uint32_t proc,
 			     const export_id_t export_id,
 			     const char *export_path,
 			     const in_addr_t server_addr,
-			     const char *client_ip);
+			     struct gsh_client *client,
+			     struct gsh_export *exp);
 
 void monitoring_nfs4_request(const uint32_t op,
 			     const uint32_t minor_version,
@@ -77,7 +85,8 @@ void monitoring_nfs4_request(const uint32_t op,
 			     const export_id_t export_id,
 			     const char *export_path,
 			     const in_addr_t server_addr,
-			     const char *client_ip);
+			     struct gsh_client *client,
+			     struct gsh_export *exp);
 
 void monitoring_nfs_io(const size_t bytes_requested,
 		       const size_t bytes_transferred,

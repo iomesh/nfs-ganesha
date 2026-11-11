@@ -3096,14 +3096,13 @@ static void record_v3_full_stats(nfs_request_t *reqdata,
 		struct fsal_export *export = op_ctx->fsal_export;
 		struct gsh_client *client = op_ctx->client;
 		const char *fullpath = op_ctx->ctx_fullpath->gr_val;
-		const char *client_ip =
-			client == NULL ? "" : client->hostaddr_str;
 		if (export != NULL)
 			export_id = export->export_id;
 		in_addr_t server_addr =
 			get_ip_addr(svc_getrpclocal(req->rq_xprt));
 		monitoring_nfs3_request(proc, request_time, result, status,
-			export_id, fullpath, server_addr, client_ip);
+			export_id, fullpath, server_addr, client,
+			 op_ctx->ctx_export);
 #endif
 	}
 }
@@ -3134,14 +3133,14 @@ static void record_v4_full_stats(compound_data_t *data,
 	struct fsal_export *export = op_ctx->fsal_export;
 	struct gsh_client *client = op_ctx->client;
 	const char *fullpath = op_ctx->ctx_fullpath->gr_val;
-	const char *client_ip = client == NULL ? "" : client->hostaddr_str;
 	in_addr_t server_addr =
 		get_ip_addr(svc_getrpclocal(data->req->rq_xprt));
 
 	if (export != NULL)
 		export_id = export->export_id;
 	monitoring_nfs4_request(proc, op_ctx->nfs_minorvers, request_time,
-			status, export_id, fullpath, server_addr, client_ip);
+			status, export_id, fullpath, server_addr, client,
+			      op_ctx->ctx_export);
 #endif
 
 	if (proc > NFS_V42_NB_OPERATION) {

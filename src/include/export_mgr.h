@@ -222,6 +222,10 @@ struct gsh_export {
 	bool update_prune_unmount;
 	/** Due to an update, this export will need to be remounted. */
 	bool update_remount;
+#ifdef USE_MONITORING
+	/* Initialized before publication; protected by owner references. */
+	void *monitoring_metrics;
+#endif
 };
 
 /* Use macro to define this to get around include file order. */
