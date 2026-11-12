@@ -4,7 +4,9 @@ set(CMAKE_CXX_STANDARD 17)
 
 SET(monitoring_SRCS
   monitoring.cc
+  observation_metrics.cc
 )
+
 
 add_library(monitoring OBJECT ${monitoring_SRCS})
 add_sanitizers(monitoring)

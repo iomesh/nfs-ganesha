@@ -50,6 +50,9 @@
 #include "nlm4.h"
 #include "nfsacl.h"
 #include "nfs_req_result.h"
+#ifdef USE_MONITORING
+#include "monitoring.h"
+#endif
 #ifdef USE_MINITRACE
 #include "minitrace.h"
 #endif  /* USE_MINITRACE */

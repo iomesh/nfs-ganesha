@@ -51,3 +51,9 @@ SET(test_attrs_SRCS
   )
 add_executable(test_attrs EXCLUDE_FROM_ALL ${test_attrs_SRCS})
 target_link_libraries(test_attrs ganesha_nfsd ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_observation_stats EXCLUDE_FROM_ALL
+  test_observation_stats.c ../support/observation_stats.c)
+target_compile_options(test_observation_stats PRIVATE
+  -UNDEBUG -Wall -Wextra -Werror)
+target_link_libraries(test_observation_stats ${CMAKE_THREAD_LIBS_INIT})

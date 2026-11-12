@@ -61,6 +61,7 @@
 #include "service_ip_mgr.h"
 #include "export_mgr.h"
 #include "server_stats.h"
+#include "observation_stats.h"
 #include "uid2grp.h"
 
 #ifdef USE_LTTNG
@@ -1078,7 +1079,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	 * we measure all time stats as intervals (elapsed nsecs) from
 	 * server boot time.  This gets high precision with simple 64 bit math.
 	 */
-	now(&op_ctx->start_time);
+	observation_now(&op_ctx->start_time);
 
 	/* Initialized user_credentials */
 	init_credentials();

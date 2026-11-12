@@ -41,6 +41,7 @@
 #include "nfs_proto_functions.h"
 #include "nfs_proto_tools.h"
 #include "server_stats.h"
+#include "observation_stats.h"
 #include "export_mgr.h"
 #include "nfs_creds.h"
 #include "pnfs_utils.h"
@@ -836,7 +837,7 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 	}
 
 	/* time each op */
-	now(&data->op_start_time);
+	observation_now(&data->op_start_time);
 
 	if (data->minorversion > 0 && data->session != NULL &&
 	    data->session->fore_channel_attrs.ca_maxoperations ==

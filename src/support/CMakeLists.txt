@@ -82,6 +82,7 @@ SET(support_STAT_SRCS
    delayed_exec.c
    bsd-base64.c
    server_stats.c
+   observation_stats.c
    export_mgr.c
    nfs4_fs_locations.c
 )

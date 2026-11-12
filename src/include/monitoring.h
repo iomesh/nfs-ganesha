@@ -30,9 +30,10 @@
 #ifndef GANESHA_MONITORING_H
 #define GANESHA_MONITORING_H
 
-#include <stddef.h>
 #include "nfs23.h"
+#include "nfs4.h"
 #include "nfs_req_result.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +41,8 @@ extern "C" {
 
 typedef uint16_t export_id_t;
 
+struct proto_op;
+struct svc_req;
 struct gsh_client;
 struct gsh_export;
 void monitoring_client_metrics_init(struct gsh_client *client);
@@ -68,7 +71,10 @@ void monitoring_init(const uint16_t port);
  * - Latency in ms as histogram.
  */
 
-void monitoring_nfs3_request(const uint32_t proc,
+/* Bind output views to the native full-operation record before its first
+ * write. Only distinct status/client/export dimensions are recorded here. */
+void monitoring_nfs3_request(struct proto_op *statistics, bool sampled,
+			     const uint32_t proc,
 			     const nsecs_elapsed_t request_time,
 			     const enum nfs_req_result result,
 			     const nfsstat3 status,
@@ -78,7 +84,8 @@ void monitoring_nfs3_request(const uint32_t proc,
 			     struct gsh_client *client,
 			     struct gsh_export *exp);
 
-void monitoring_nfs4_request(const uint32_t op,
+void monitoring_nfs4_request(struct proto_op *statistics, bool sampled,
+			     const uint32_t op,
 			     const uint32_t minor_version,
 			     const nsecs_elapsed_t request_time,
 			     const nfsstat4 status,
@@ -87,6 +94,7 @@ void monitoring_nfs4_request(const uint32_t op,
 			     const in_addr_t server_addr,
 			     struct gsh_client *client,
 			     struct gsh_export *exp);
+
 
 void monitoring_nfs_io(const size_t bytes_requested,
 		       const size_t bytes_transferred,

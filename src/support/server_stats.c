@@ -41,6 +41,7 @@
 #include "config.h"
 
 #include <time.h>
+#include <math.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <stdint.h>
@@ -59,6 +60,7 @@
 #include "client_mgr.h"
 #include "export_mgr.h"
 #include "server_stats.h"
+#include "observation_stats.h"
 #include <abstract_atomic.h>
 #include "nfs_proto_functions.h"
 #include "nfs_convert.h"
@@ -182,11 +184,7 @@ static const uint32_t nfsv42_optype[NFS_V42_NB_OPERATION] = {
 
 /* latency stats
  */
-struct op_latency {
-	uint64_t latency;
-	uint64_t min;
-	uint64_t max;
-};
+
 
 #ifdef _USE_NFS3
 /* v3 ops
@@ -234,13 +232,7 @@ struct op_count {
 	uint64_t dups;		/* detected dup requests */
 };
 
-struct proto_op {
-	uint64_t total;		/* total of any kind */
-	uint64_t errors;	/* ! NFS_OK */
-	uint64_t dups;		/* detected dup requests */
-	struct op_latency latency;	/* either executed ops latency */
-	struct op_latency dup_latency;	/* or latency (runtime) to replay */
-};
+
 
 /* basic I/O transfer counter
  */
@@ -574,30 +566,12 @@ static struct _9p_stats *get_9p(struct gsh_stats *stats, pthread_rwlock_t *lock)
  * @param request_time [IN] time consumed by request
  * @param dup          [IN] detected this was a dup request
  */
+
+
 void record_latency(struct proto_op *op, nsecs_elapsed_t request_time, bool dup)
 {
+	observation_latency(op, request_time, dup);
 
-	/* dup latency is counted separately */
-	if (likely(!dup)) {
-		(void)atomic_add_uint64_t(&op->latency.latency, request_time);
-		if (op->latency.min == 0L || op->latency.min > request_time)
-			(void)atomic_store_uint64_t(&op->latency.min,
-						    request_time);
-		if (op->latency.max == 0L || op->latency.max < request_time)
-			(void)atomic_store_uint64_t(&op->latency.max,
-						    request_time);
-	} else {
-		(void)atomic_add_uint64_t(&op->dup_latency.latency,
-					  request_time);
-		if (op->dup_latency.min == 0L
-		    || op->dup_latency.min > request_time)
-			(void)atomic_store_uint64_t(&op->dup_latency.min,
-						    request_time);
-		if (op->dup_latency.max == 0L
-		    || op->dup_latency.max < request_time)
-			(void)atomic_store_uint64_t(&op->dup_latency.max,
-						    request_time);
-	}
 }
 
 /**
@@ -615,12 +589,10 @@ void record_latency(struct proto_op *op, nsecs_elapsed_t request_time, bool dup)
 static void record_io(struct xfer_op *iop, size_t requested, size_t transferred,
 		      bool success)
 {
-	(void)atomic_inc_uint64_t(&iop->cmd.total);
+	observation_count(&iop->cmd, success, false, true);
 	if (success) {
 		(void)atomic_add_uint64_t(&iop->requested, requested);
 		(void)atomic_add_uint64_t(&iop->transferred, transferred);
-	} else {
-		(void)atomic_inc_uint64_t(&iop->cmd.errors);
 	}
 	/* somehow we must record latency */
 }
@@ -675,9 +647,8 @@ static void record_io_stats(struct gsh_stats *gsh_st, pthread_rwlock_t *lock,
 /**
  * @brief count the protocol operation
  *
- * Use atomic ops to avoid locks. We don't lock for the max
- * and min because if there is a collision, over the long haul,
- * the error is near zero...
+ * Business counts use atomic updates. Selected duration samples are updated
+ * together by observation_record; exporters only read snapshots.
  *
  * @param op           [IN] pointer to specific protocol struct
  * @param request_time [IN] wallclock time (nsecs) for this op
@@ -688,14 +659,7 @@ static void record_io_stats(struct gsh_stats *gsh_st, pthread_rwlock_t *lock,
 static void record_op(struct proto_op *op, nsecs_elapsed_t request_time,
 		      bool success, bool dup)
 {
-	/* count the op */
-	(void)atomic_inc_uint64_t(&op->total);
-	/* also count it as an error if protocol not happy */
-	if (!success)
-		(void)atomic_inc_uint64_t(&op->errors);
-	if (unlikely(dup))
-		(void)atomic_inc_uint64_t(&op->dups);
-	record_latency(op, request_time, dup);
+	observation_record(op, request_time, success, dup, true);
 }
 
 /**
@@ -712,13 +676,7 @@ static void record_op(struct proto_op *op, nsecs_elapsed_t request_time,
 
 static void record_op_only(struct proto_op *op, bool success, bool dup)
 {
-	/* count the op */
-	(void)atomic_inc_uint64_t(&op->total);
-	/* also count it as an error if protocol not happy */
-	if (!success)
-		(void)atomic_inc_uint64_t(&op->errors);
-	if (unlikely(dup))
-		(void)atomic_inc_uint64_t(&op->dups);
+	observation_count(op, success, dup, true);
 }
 
 static void record_clnt_ops(struct op_count *op, bool success, bool dup)
@@ -741,16 +699,7 @@ static void record_clnt_ops(struct op_count *op, bool success, bool dup)
 
 static void reset_op(struct proto_op *op)
 {
-	(void)atomic_store_uint64_t(&op->total, 0);
-	(void)atomic_store_uint64_t(&op->errors, 0);
-	(void)atomic_store_uint64_t(&op->dups, 0);
-	/* reset latency related counters */
-	(void)atomic_store_uint64_t(&op->latency.latency, 0);
-	(void)atomic_store_uint64_t(&op->latency.min, 0);
-	(void)atomic_store_uint64_t(&op->latency.max, 0);
-	(void)atomic_store_uint64_t(&op->dup_latency.latency, 0);
-	(void)atomic_store_uint64_t(&op->dup_latency.min, 0);
-	(void)atomic_store_uint64_t(&op->dup_latency.max, 0);
+	observation_reset(op);
 }
 
 /**
@@ -1366,7 +1315,8 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 {
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
-	nsecs_elapsed_t time_diff;
+	struct timespec completed;
+	nsecs_elapsed_t time_diff = 0;
 	struct svc_req *req = &reqdata->svc;
 	uint32_t proto_op = req->rq_msg.cb_proc;
 	uint32_t program_op = req->rq_msg.cb_prog;
@@ -1394,7 +1344,9 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 		return;
 
 	now(&current_time);
-	time_diff = timespec_diff(&op_ctx->start_time, &current_time);
+	observation_now(&completed);
+	time_diff = timespec_diff(&op_ctx->start_time, &completed);
+
 
 #ifdef _USE_NFS3
 	if (nfs_param.core_param.enable_FULLV3STATS)
@@ -1440,7 +1392,8 @@ void server_stats_nfsv4_op_done(compound_data_t *data,
 	int proto_op = data->opcode;
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
-	nsecs_elapsed_t time_diff;
+	struct timespec completed;
+	nsecs_elapsed_t time_diff = 0;
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
@@ -1451,7 +1404,9 @@ void server_stats_nfsv4_op_done(compound_data_t *data,
 		return;
 
 	now(&current_time);
-	time_diff = timespec_diff(start_time, &current_time);
+	observation_now(&completed);
+	time_diff = timespec_diff(start_time, &completed);
+
 
 	if (nfs_param.core_param.enable_FULLV4STATS)
 		record_v4_full_stats(data, time_diff, status);
@@ -1505,12 +1460,17 @@ void server_stats_compound_done(int num_ops, int status)
 {
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
-	nsecs_elapsed_t time_diff;
+	struct timespec completed;
+	nsecs_elapsed_t time_diff = 0;
+
+
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
 	now(&current_time);
-	time_diff = timespec_diff(&op_ctx->start_time, &current_time);
+	observation_now(&completed);
+	time_diff = timespec_diff(&op_ctx->start_time, &completed);
+
 
 	if (client != NULL) {
 		struct server_stats *server_st;
@@ -1789,10 +1749,26 @@ static void server_dbus_op_stats(struct proto_op *op, DBusMessageIter *iter)
  * @param iter  [IN] iterator in reply stream to fill
  */
 
+/* Preserve rc.3's milliseconds conversion and floating-point evaluation
+ * order. Only the denominator changes to the matching selected population.
+ * Count-only/duplicate events remain in that legacy population. */
+static double server_dbus_latency_mean(const struct observation_snapshot *snapshot)
+{
+	if (snapshot->sampled_total == 0) {
+		return snapshot->total == 0 ? 0 : NAN;
+	}
+	return (double)snapshot->latency.latency * 0.000001 /
+		snapshot->sampled_total;
+}
+
 static void server_dbus_iostats(struct xfer_op *iop, DBusMessageIter *iter)
 {
 	DBusMessageIter struct_iter;
 	uint64_t zero = 0;
+
+	struct observation_snapshot snapshot;
+
+	observation_snapshot(&iop->cmd, false, &snapshot);
 
 	dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL,
 					 &struct_iter);
@@ -1801,11 +1777,11 @@ static void server_dbus_iostats(struct xfer_op *iop, DBusMessageIter *iter)
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
 				       &iop->transferred);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &iop->cmd.total);
+				       &snapshot.total);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &iop->cmd.errors);
+				       &snapshot.errors);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &iop->cmd.latency.latency);
+				       &snapshot.latency.latency);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
 				       &zero);
 	dbus_message_iter_close_container(iter, &struct_iter);
@@ -1832,16 +1808,19 @@ static void server_dbus_cexop_stats(struct xfer_op *iop, DBusMessageIter *iter,
 	DBusMessageIter struct_iter;
 	double res = 0.0;
 
+	struct observation_snapshot snapshot;
+
+	observation_snapshot(&iop->cmd, false, &snapshot);
+
 	dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL,
 					 &struct_iter);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &iop->cmd.total);
+				       &snapshot.total);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &iop->cmd.errors);
+				       &snapshot.errors);
 	if (for_export) {
-		if (iop->cmd.total)
-			res = (double) (iop->cmd.latency.latency * 0.000001) /
-					(iop->cmd.total);
+		if (snapshot.total)
+			res = server_dbus_latency_mean(&snapshot);
 		dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_DOUBLE,
 					       &res);
 	}
@@ -1869,16 +1848,19 @@ static void server_dbus_ceop_stats(struct proto_op *op, DBusMessageIter *iter,
 	DBusMessageIter struct_iter;
 	double res = 0.0;
 
+	struct observation_snapshot snapshot;
+
+	observation_snapshot(op, false, &snapshot);
+
 	dbus_message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL,
 					 &struct_iter);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &op->total);
+				       &snapshot.total);
 	dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_UINT64,
-				       &op->errors);
+				       &snapshot.errors);
 	if (for_export) {
-		if (op->total)
-			res = (double) (op->latency.latency * 0.000001) /
-								op->total;
+		if (snapshot.total)
+			res = server_dbus_latency_mean(&snapshot);
 		dbus_message_iter_append_basic(&struct_iter, DBUS_TYPE_DOUBLE,
 					       &res);
 	}
@@ -2848,7 +2830,10 @@ void server_dbus_v3_full_stats(DBusMessageIter *iter)
 	dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY,
 					 "(stttddd)", &array_iter);
 	for (op = 1; op < NFSPROC3_COMMIT+1; op++) {
-		if (v3_full_stats[op].total) {
+		struct observation_snapshot snapshot;
+
+		observation_snapshot(&v3_full_stats[op], false, &snapshot);
+		if (snapshot.total) {
 			op_name = (char *) nfsproc3_to_str(op);
 			dbus_message_iter_open_container(&array_iter,
 							 DBUS_TYPE_STRUCT,
@@ -2856,26 +2841,25 @@ void server_dbus_v3_full_stats(DBusMessageIter *iter)
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_STRING, &op_name);
 			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_UINT64, &v3_full_stats[op].total);
+				DBUS_TYPE_UINT64, &snapshot.total);
 			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_UINT64, &v3_full_stats[op].errors);
+				DBUS_TYPE_UINT64, &snapshot.errors);
 			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_UINT64, &v3_full_stats[op].dups);
-			res = (double) v3_full_stats[op].latency.latency *
-					0.000001 / v3_full_stats[op].total;
+				DBUS_TYPE_UINT64, &snapshot.dups);
+			res = server_dbus_latency_mean(&snapshot);
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_DOUBLE, &res);
-			res = (double) v3_full_stats[op].latency.min *
+			res = (double) snapshot.latency.min *
 					0.000001;
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_DOUBLE, &res);
-			res = (double) v3_full_stats[op].latency.max *
+			res = (double) snapshot.latency.max *
 					0.000001;
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_DOUBLE, &res);
 			dbus_message_iter_close_container(&array_iter,
 							  &op_iter);
-			op_counter += v3_full_stats[op].total;
+			op_counter += snapshot.total;
 		}
 	}
 	if (op_counter == 0) {
@@ -2923,7 +2907,10 @@ void server_dbus_v4_full_stats(DBusMessageIter *iter)
 	dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY,
 					 "(sttddd)", &array_iter);
 	for (op = 1; op < NFS_V42_NB_OPERATION+1; op++) {
-		if (v4_full_stats[op].total) {
+		struct observation_snapshot snapshot;
+
+		observation_snapshot(&v4_full_stats[op], false, &snapshot);
+		if (snapshot.total) {
 			op_name = (char *) nfsop4_to_str(op);
 			dbus_message_iter_open_container(&array_iter,
 							 DBUS_TYPE_STRUCT,
@@ -2931,22 +2918,21 @@ void server_dbus_v4_full_stats(DBusMessageIter *iter)
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_STRING, &op_name);
 			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_UINT64, &v4_full_stats[op].total);
+				DBUS_TYPE_UINT64, &snapshot.total);
 			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_UINT64, &v4_full_stats[op].errors);
-			res = (double) v4_full_stats[op].latency.latency *
-					0.000001 / v4_full_stats[op].total;
-			dbus_message_iter_append_basic(&op_iter,
-				DBUS_TYPE_DOUBLE, &res);
-			res = (double) v4_full_stats[op].latency.min * 0.000001;
+				DBUS_TYPE_UINT64, &snapshot.errors);
+			res = server_dbus_latency_mean(&snapshot);
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_DOUBLE, &res);
-			res = (double) v4_full_stats[op].latency.max * 0.000001;
+			res = (double) snapshot.latency.min * 0.000001;
+			dbus_message_iter_append_basic(&op_iter,
+				DBUS_TYPE_DOUBLE, &res);
+			res = (double) snapshot.latency.max * 0.000001;
 			dbus_message_iter_append_basic(&op_iter,
 				DBUS_TYPE_DOUBLE, &res);
 			dbus_message_iter_close_container(&array_iter,
 							  &op_iter);
-			op_counter += v4_full_stats[op].total;
+			op_counter += snapshot.total;
 		}
 	}
 	if (op_counter == 0) {
@@ -3088,9 +3074,6 @@ static void record_v3_full_stats(nfs_request_t *reqdata,
 			reqdata->res_nfs->res_getattr3.status :
 			NFS3_OK;
 
-		record_op(&v3_full_stats[proc], request_time,
-			  result == NFS_REQ_OK && status == NFS3_OK, dup);
-
 #ifdef USE_MONITORING
 		uint16_t export_id = 0;
 		struct fsal_export *export = op_ctx->fsal_export;
@@ -3100,10 +3083,13 @@ static void record_v3_full_stats(nfs_request_t *reqdata,
 			export_id = export->export_id;
 		in_addr_t server_addr =
 			get_ip_addr(svc_getrpclocal(req->rq_xprt));
-		monitoring_nfs3_request(proc, request_time, result, status,
+		monitoring_nfs3_request(&v3_full_stats[proc], true,
+			proc, request_time, result, status,
 			export_id, fullpath, server_addr, client,
 			 op_ctx->ctx_export);
 #endif
+		record_op(&v3_full_stats[proc], request_time,
+			  result == NFS_REQ_OK && status == NFS3_OK, dup);
 	}
 }
 
@@ -3112,12 +3098,7 @@ void reset_v3_full_stats(void)
 	int op;
 
 	for (op = 1; op < NFSPROC3_COMMIT+1; op++) {
-		v3_full_stats[op].total = 0;
-		v3_full_stats[op].errors = 0;
-		v3_full_stats[op].dups = 0;
-		v3_full_stats[op].latency.latency = 0;
-		v3_full_stats[op].latency.min = 0;
-		v3_full_stats[op].latency.max = 0;
+		observation_reset(&v3_full_stats[op]);
 	}
 }
 #endif
@@ -3138,7 +3119,8 @@ static void record_v4_full_stats(compound_data_t *data,
 
 	if (export != NULL)
 		export_id = export->export_id;
-	monitoring_nfs4_request(proc, op_ctx->nfs_minorvers, request_time,
+	monitoring_nfs4_request(proc <= NFS_V42_NB_OPERATION ?
+		&v4_full_stats[proc] : NULL, true, proc, op_ctx->nfs_minorvers, request_time,
 			status, export_id, fullpath, server_addr, client,
 			      op_ctx->ctx_export);
 #endif
@@ -3157,12 +3139,7 @@ void reset_v4_full_stats(void)
 	int op;
 
 	for (op = 1; op < NFS_V42_NB_OPERATION+1; op++) {
-		v4_full_stats[op].total = 0;
-		v4_full_stats[op].errors = 0;
-		v4_full_stats[op].dups = 0;
-		v4_full_stats[op].latency.latency = 0;
-		v4_full_stats[op].latency.min = 0;
-		v4_full_stats[op].latency.max = 0;
+		observation_reset(&v4_full_stats[op]);
 	}
 }
 
