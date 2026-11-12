@@ -15,6 +15,7 @@ struct monitoring_parameter {
 	bool enabled;
 	bool overall;
 	bool stages;
+	bool cpu;
 	uint32_t sample_every;
 };
 

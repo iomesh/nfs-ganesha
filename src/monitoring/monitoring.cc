@@ -304,6 +304,22 @@ static void observeNtirpc(enum svc_observe_stage stage,
       observation_count(counter, true, false, false);
       return;
     }
+    if (stage == SVC_OBSERVE_CPU_UNAVAILABLE) {
+      metrics->moduleObservationFailures.Increment();
+      return;
+    }
+    if (stage == SVC_OBSERVE_DISPATCH_CPU || stage == SVC_OBSERVE_RESUME_CPU) {
+      static thread_local struct proto_op *cpu[2]{};
+      const bool resumed = stage == SVC_OBSERVE_RESUME_CPU;
+      auto &statistics = cpu[resumed];
+      if (statistics == nullptr) {
+        statistics = observations->Duration("sfs_module_thread_cpu_milliseconds",
+            "Current-thread execution CPU; excludes suspended/background work.",
+            {{"module", "ntirpc"}, {"segment", resumed ? "resume" : "dispatch"}});
+      }
+      observation_record(statistics, duration, true, false, true);
+      return;
+    }
     if (stage == SVC_OBSERVE_SEND_BLOCKED) {
       metrics->sendBlocked.Increment();
       return;
@@ -312,7 +328,7 @@ static void observeNtirpc(enum svc_observe_stage stage,
       nullptr, "rpc_decode", "reply_prepare_encode", "send_queue", "send_submission",
       "recv_schedule", "resume_schedule", "recv_direct", nullptr,
       "recv_record", "recv_segment_wall", "recv_outside_segments", "request_alloc",
-      nullptr, nullptr, "dispatch_setup", nullptr
+      nullptr, nullptr, nullptr, nullptr, nullptr, "dispatch_setup", nullptr
     };
     static_assert(sizeof(stages) / sizeof(stages[0]) == SVC_OBSERVE_STAGE_COUNT,
                   "NTIRPC observation stage mapping must be complete");
@@ -667,7 +683,7 @@ void monitoring_init(const uint16_t port) {
       .Help("Observation boundary and bucket schema version.")
       .Register(*registry).Add({}).Set(OBSERVATION_SCHEMA_VERSION);
   svc_observe_register(observation.enabled ? observeNtirpc : nullptr,
-                       observation.overall, observation.stages,
+                       observation.overall, observation.stages, observation.cpu,
                        observation.sample_every);
 #endif
   initialised = true;

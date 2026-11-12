@@ -11,6 +11,7 @@ static struct config_item monitoring_params[] = {
 	CONF_ITEM_BOOL("Enabled", true, monitoring_parameter, enabled),
 	CONF_ITEM_BOOL("Overall", true, monitoring_parameter, overall),
 	CONF_ITEM_BOOL("Stages", false, monitoring_parameter, stages),
+	CONF_ITEM_BOOL("CPU", false, monitoring_parameter, cpu),
 	CONF_ITEM_UI32("Sample_Every", 1, UINT32_MAX, 1,
 		       monitoring_parameter, sample_every),
 	CONFIG_EOL
