@@ -53,6 +53,10 @@
 #include "monitoring_internal.h"
 #include "observation_metrics.h"
 
+#ifdef USE_PERF_MONITORING
+#include "monitoring_config.h"
+#include <rpc/svc_observe.h>
+#endif
 
 /*
  * This file contains the C++ monitoring implementation for Ganesha.
@@ -108,6 +112,10 @@ class Metrics {
   prometheus::Family<prometheus::Counter> &bytesSentTotalByOperationExport;
   prometheus::Family<prometheus::Histogram> &requestSizeByOperationExport;
   prometheus::Family<prometheus::Histogram> &responseSizeByOperationExport;
+#ifdef USE_PERF_MONITORING
+  prometheus::Counter &moduleObservationFailures;
+  prometheus::Counter &sendBlocked;
+#endif
 };
 
 Metrics::Metrics(prometheus::Registry &registry) :
@@ -223,11 +231,107 @@ Metrics::Metrics(prometheus::Registry &registry) :
       .Name("nfs_response_size_by_export_bytes")
       .Help("Response size by export in bytes.")
       .Register(registry))
+#ifdef USE_PERF_MONITORING
+
+  , moduleObservationFailures(
+          prometheus::BuildCounter()
+              .Name("sfs_module_observation_failures_total")
+              .Help("Failed module metric updates; nonzero invalidates "
+                    "observation coverage.")
+              .Register(registry)
+              .Add({})),
+      sendBlocked(prometheus::BuildCounter()
+                      .Name("sfs_ntirpc_send_blocked_total")
+                      .Help("Socket EAGAIN/EWOULDBLOCK events; counted without "
+                            "duration sampling.")
+                      .Register(registry)
+                      .Add({}))
+#endif
 {
 }
 
 static std::unique_ptr<Metrics> metrics;
 
+#ifdef USE_PERF_MONITORING
+/* MONITORING is loaded before monitoring_init(); settings remain immutable
+ * while requests run. They do not depend on container environment variables. */
+static const monitoring_parameter &moduleObservationConfig() {
+  return monitoring_param;
+}
+
+static void observeModule(const char *module, const char *stage, uint64_t duration,
+                          const char *operation = "rpc") {
+  const int savedErrno = errno;
+  try {
+    static thread_local std::map<std::tuple<const char *, const char *, const char *>,
+                                struct proto_op *> cache;
+    const auto key = std::make_tuple(module, stage, operation);
+    auto found = cache.find(key);
+    if (found == cache.end()) {
+      ObservationMetrics::Labels labels{{"module", module}, {"operation", operation}};
+      const char *name = "sfs_module_duration_milliseconds";
+      if (stage != nullptr) {
+        labels.emplace("stage", stage);
+        name = "sfs_module_stage_duration_milliseconds";
+      }
+      auto *statistics = observations->Duration(name,
+          "Sampled local duration; socket submission is not client receipt.", labels);
+      found = cache.emplace(key, statistics).first;
+    }
+    observation_record(found->second, duration, true, false, true);
+  } catch (...) {
+    metrics->moduleObservationFailures.Increment();
+  }
+  errno = savedErrno;
+}
+
+static void observeNtirpc(enum svc_observe_stage stage,
+                         enum svc_observe_result result, uint64_t duration) {
+  try {
+    if (stage == SVC_OBSERVE_COMPLETION || stage == SVC_OBSERVE_RECV_INCOMPLETE ||
+        stage == SVC_OBSERVE_STAGE_INCOMPLETE) {
+      static const char *results[] = {"submitted", "error", "no_reply", "recv_incomplete_sample",
+                                      "stage_incomplete_sample"};
+      static thread_local std::array<struct proto_op *, 5> counters{};
+      const size_t index = stage == SVC_OBSERVE_STAGE_INCOMPLETE ? 4 :
+                           stage == SVC_OBSERVE_RECV_INCOMPLETE ? 3 : result;
+      auto &counter = counters[index];
+      if (counter == nullptr) {
+        counter = observations->Counter("sfs_module_completions_total",
+            "Full terminal outcomes; *_sample series count sampled coverage gaps.",
+            {{"module", "ntirpc"}, {"result", results[index]}});
+      }
+      observation_count(counter, true, false, false);
+      return;
+    }
+    if (stage == SVC_OBSERVE_SEND_BLOCKED) {
+      metrics->sendBlocked.Increment();
+      return;
+    }
+    static const char *stages[] = {
+      nullptr, "rpc_decode", "reply_prepare_encode", "send_queue", "send_submission",
+      "recv_schedule", "resume_schedule", "recv_direct", nullptr,
+      "recv_record", "recv_segment_wall", "recv_outside_segments", "request_alloc",
+      nullptr, nullptr, "dispatch_setup", nullptr
+    };
+    static_assert(sizeof(stages) / sizeof(stages[0]) == SVC_OBSERVE_STAGE_COUNT,
+                  "NTIRPC observation stage mapping must be complete");
+    const char *operation = "rpc";
+    if (stage == SVC_OBSERVE_RECV_SCHEDULE || stage == SVC_OBSERVE_RECV_DIRECT) {
+      operation = "recv_event";
+    } else if (stage >= SVC_OBSERVE_RECV_RECORD && stage <= SVC_OBSERVE_RECV_OUTSIDE_SEGMENTS) {
+      operation = "recv_record";
+    } else if (stage == SVC_OBSERVE_TOTAL) {
+      static const char *results[] = {"submitted", "error", "no_reply"};
+      operation = results[result];
+    }
+    observeModule("ntirpc", stages[stage], duration, operation);
+  } catch (...) {
+    metrics->moduleObservationFailures.Increment();
+  }
+}
+
+#endif
 
 template<class K, class T=std::string>
 class SimpleMap {
@@ -554,6 +658,18 @@ void monitoring_init(const uint16_t port) {
   observations = std::make_shared<ObservationMetrics>();
   exposer->RegisterCollectable(observations);
 
+#ifdef USE_PERF_MONITORING
+  const auto &observation = moduleObservationConfig();
+  prometheus::BuildGauge().Name("sfs_observation_sample_every")
+      .Help("Duration selection denominator; business counters remain full.")
+      .Register(*registry).Add({}).Set(observation.enabled ? observation.sample_every : 1);
+  prometheus::BuildGauge().Name("sfs_observation_schema_version")
+      .Help("Observation boundary and bucket schema version.")
+      .Register(*registry).Add({}).Set(OBSERVATION_SCHEMA_VERSION);
+  svc_observe_register(observation.enabled ? observeNtirpc : nullptr,
+                       observation.overall, observation.stages,
+                       observation.sample_every);
+#endif
   initialised = true;
 }
 
@@ -576,6 +692,16 @@ void monitoring_nfs3_request(struct proto_op *statistics, bool sampled,
   const size_t slot = proc <= NFSPROC3_COMMIT ? proc : 0;
   observeNfsRequest(statistics, sampled, slot, operation, request_time, version, statusLabel, export_id,
           fullpath, service_ip, client, exp);
+#ifdef USE_PERF_MONITORING
+  static thread_local std::array<bool, nfs3OperationSlots> stageRegistered{};
+  if (monitoring_param.enabled && monitoring_param.stages && !stageRegistered[slot]) {
+    observations->Histogram("sfs_module_stage_duration_milliseconds",
+        "NFSv3 protocol processing at the legacy procedure completion boundary.",
+        {{"module", "ganesha"}, {"operation", "nfs3"},
+         {"procedure", operation}, {"stage", "protocol_processing"}}, statistics);
+    stageRegistered[slot] = true;
+  }
+#endif
 }
 
 static const char *nfsversion4_to_str(uint32_t minorversion) {
@@ -591,6 +717,117 @@ static const char *nfsversion4_to_str(uint32_t minorversion) {
   }
 }
 
+#ifdef USE_PERF_MONITORING
+void monitoring_protocol_done(struct svc_req *req, const struct timespec *completed) {
+  auto &observation = req->rq_observation;
+  if (!observation.application_started || observation.application_completed) {
+    return;
+  }
+  const uint64_t timestamp = static_cast<uint64_t>(completed->tv_sec) * 1000000000 +
+                             completed->tv_nsec;
+  svc_observe_application_end(&observation, timestamp);
+  const uint64_t duration = timestamp - observation.application_started;
+  if (req->rq_msg.cb_prog != nfs_param.core_param.program[P_NFS]) {
+    return;
+  }
+  if (req->rq_msg.cb_vers == NFS_V4) {
+    auto *request = container_of(req, nfs_request_t, svc);
+    const auto &args = request->arg_nfs.arg_compound4;
+    monitoring_nfs4_compound(args.minorversion, args.argarray.argarray_val,
+                            args.argarray.argarray_len, duration);
+  } else if (req->rq_msg.cb_vers == NFS_V3 &&
+             !(nfs_param.core_param.enable_NFSSTATS &&
+               !nfs_param.core_param.enable_FASTSTATS &&
+               nfs_param.core_param.enable_FULLV3STATS)) {
+    observeModule("ganesha", "protocol_processing", duration, "nfs3");
+  }
+}
+
+void monitoring_nfs4_compound(const uint32_t minor_version,
+                              const nfs_argop4 *operations,
+                              const uint32_t operation_count,
+                              const nsecs_elapsed_t request_time) {
+  constexpr size_t containsCreate = 1 << 0;
+  constexpr size_t containsRemove = 1 << 1;
+  constexpr size_t containsWrite = 1 << 2;
+  constexpr size_t containsRead = 1 << 3;
+  constexpr size_t containsReaddir = 1 << 4;
+  constexpr size_t containsOpen = 1 << 5;
+  constexpr size_t containsClose = 1 << 6;
+  constexpr size_t operationCombinations = 1 << 7;
+  size_t present = 0;
+  for (uint32_t index = 0; index < operation_count; ++index) {
+    switch (operations[index].argop) {
+      case NFS4_OP_CREATE:
+        present |= containsCreate;
+        break;
+      case NFS4_OP_REMOVE:
+        present |= containsRemove;
+        break;
+      case NFS4_OP_WRITE:
+        present |= containsWrite;
+        break;
+      case NFS4_OP_READ:
+        present |= containsRead;
+        break;
+      case NFS4_OP_READDIR:
+        present |= containsReaddir;
+        break;
+      case NFS4_OP_OPEN:
+        present |= containsOpen;
+        break;
+      case NFS4_OP_CLOSE:
+        present |= containsClose;
+        break;
+      default:
+        break;
+    }
+  }
+  // One sample per input COMPOUND; repeated operations only set the same bit.
+  // The process-lifetime Registry owns these lazily registered metric series.
+  static thread_local std::array<struct proto_op *, 4 * operationCombinations> cache{};
+  const size_t version = minor_version < 3 ? minor_version : 3;
+  auto &histogram = cache[version * operationCombinations + present];
+  if (histogram == nullptr) {
+    histogram = observations->Duration("nfs4_compound_processing_milliseconds",
+        "NFSv4 protocol processing at the legacy COMPOUND completion boundary.",
+        {{kVersion, nfsversion4_to_str(minor_version)},
+         {"contains_create", present & containsCreate ? "true" : "false"},
+         {"contains_remove", present & containsRemove ? "true" : "false"},
+         {"contains_write", present & containsWrite ? "true" : "false"},
+         {"contains_read", present & containsRead ? "true" : "false"},
+         {"contains_readdir", present & containsReaddir ? "true" : "false"},
+         {"contains_open", present & containsOpen ? "true" : "false"},
+         {"contains_close", present & containsClose ? "true" : "false"}});
+    observations->Histogram("sfs_module_stage_duration_milliseconds",
+        "NFSv4 protocol processing; nested operations must not be added to this stage.",
+        {{"module", "ganesha"}, {"operation", "compound"},
+         {"version", nfsversion4_to_str(minor_version)}, {"stage", "protocol_processing"},
+         {"contains_create", present & containsCreate ? "true" : "false"},
+         {"contains_remove", present & containsRemove ? "true" : "false"},
+         {"contains_write", present & containsWrite ? "true" : "false"},
+         {"contains_read", present & containsRead ? "true" : "false"},
+         {"contains_readdir", present & containsReaddir ? "true" : "false"},
+         {"contains_open", present & containsOpen ? "true" : "false"},
+         {"contains_close", present & containsClose ? "true" : "false"}}, histogram);
+  }
+  observation_record(histogram, request_time, true, false, true);
+}
+
+void monitoring_nfs4_create_fsal(const uint32_t minor_version,
+                                const nsecs_elapsed_t request_time) {
+  static thread_local std::array<struct proto_op *, 4> cache{};
+  const size_t version = minor_version < 3 ? minor_version : 3;
+  auto &histogram = cache[version];
+  if (histogram == nullptr) {
+    histogram = observations->Duration("nfs4_create_fsal_milliseconds",
+        "Synchronous fsal_create call, including errors.",
+        {{kVersion, nfsversion4_to_str(minor_version)}});
+  }
+  observation_record(histogram, request_time, true, false, true);
+}
+
+#endif
 
 void monitoring_nfs4_request(struct proto_op *statistics, bool sampled,
 			     const uint32_t op,

@@ -308,6 +308,12 @@ if(USE_MONITORING)
   )
 endif(USE_MONITORING)
 
+# Build request performance observation independently of legacy metrics.
+option(USE_PERF_MONITORING "Build request performance observations" ON)
+if(NOT USE_MONITORING)
+  set(USE_PERF_MONITORING OFF)
+endif()
+
 goption(ENABLE_SFS "Build into SFS" OFF)
 gopt_test(ENABLE_SFS)
 
@@ -1349,6 +1355,7 @@ message(STATUS "ENABLE_VFS_DEBUG_ACL = ${ENABLE_VFS_DEBUG_ACL}")
 message(STATUS "ENABLE_RFC_ACL = ${ENABLE_RFC_ACL}")
 message(STATUS "CEPHFS_POSIX_ACL = ${CEPHFS_POSIX_ACL}")
 message(STATUS "USE_MONITORING = ${USE_MONITORING}")
+message(STATUS "USE_PERF_MONITORING = ${USE_PERF_MONITORING}")
 message(STATUS "USE_MINITRACE = ${USE_MINITRACE}")
 message(STATUS "USE_CAPS = ${USE_CAPS}")
 message(STATUS "USE_BLKID = ${USE_BLKID}")

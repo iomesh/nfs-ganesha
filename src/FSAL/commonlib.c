@@ -3211,6 +3211,10 @@ void init_op_context(struct req_op_context *ctx,
 	ctx->nfs_vers = nfs_vers;
 	ctx->nfs_minorvers = nfs_minorvers;
 	ctx->req_type = req_type;
+#ifdef USE_PERF_MONITORING
+	ctx->flags.observation_sampled = ctx->saved_op_ctx == NULL ||
+		ctx->saved_op_ctx->flags.observation_sampled;
+#endif
 	ctx->caller_addr = caller_data;
 
 	/* Since this is a brand new op context, no need to release anything.

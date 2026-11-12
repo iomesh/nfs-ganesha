@@ -497,6 +497,9 @@ struct req_op_context {
 	uint32_t op_id;
 	struct {
 		bool pseudo_fsal_internal_lookup;
+#ifdef USE_PERF_MONITORING
+		bool observation_sampled; /* request-owned selection, not TLS */
+#endif
 	} flags;
 };
 

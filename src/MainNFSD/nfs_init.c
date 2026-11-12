@@ -41,6 +41,9 @@
 #include "nfs_proto_functions.h"
 #include "nfs_dupreq.h"
 #include "config_parsing.h"
+#ifdef USE_PERF_MONITORING
+#include "monitoring_config.h"
+#endif
 #include "nfs4_acls.h"
 #include "nfs_rpc_callback.h"
 #ifdef USE_DBUS
@@ -429,6 +432,19 @@ int nfs_set_param_from_conf(config_file_t parse_tree,
 			"Error while parsing core configuration");
 		return -1;
 	}
+
+#ifdef USE_PERF_MONITORING
+	(void) load_config_from_parse(parse_tree,
+				      &monitoring_config,
+				      &monitoring_param,
+				      true,
+				      err_type);
+	if (!config_error_is_harmless(err_type)) {
+		LogCrit(COMPONENT_INIT,
+			"Error while parsing monitoring configuration");
+		return -1;
+	}
+#endif
 
 	/* Worker parameters: ip/name hash table and expiration
 	 * for each entry

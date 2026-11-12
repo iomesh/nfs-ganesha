@@ -760,6 +760,18 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 	    || reqdata->svc.rq_msg.cb_vers != NFS_V4)
 		server_stats_nfs_done(reqdata, rc, false);
 
+#ifdef USE_PERF_MONITORING
+	/* NFS4 early replies and disabled legacy statistics still close the
+	 * application interval. Normal completions already supplied this stamp. */
+	if (reqdata->svc.rq_observation.application_started &&
+	    !reqdata->svc.rq_observation.application_completed) {
+		struct timespec completed;
+
+		observation_now(&completed);
+		monitoring_protocol_done(&reqdata->svc, &completed);
+	}
+#endif
+
 	/* If request is dropped, no return to the client */
 	if (rc == NFS_REQ_DROP) {
 		/* The request was dropped */
@@ -929,6 +941,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 #endif /* _USE_NFS3 */
 	bool no_dispatch = false;
 
+
 	if (retry)
 		goto retry_after_drc_suspend;
 
@@ -1079,7 +1092,16 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	 * we measure all time stats as intervals (elapsed nsecs) from
 	 * server boot time.  This gets high precision with simple 64 bit math.
 	 */
-	observation_now(&op_ctx->start_time);
+#ifdef USE_PERF_MONITORING
+	op_ctx->flags.observation_sampled = !reqdata->svc.rq_observation.active ||
+		reqdata->svc.rq_observation.sampled;
+#endif
+	server_stats_start(&op_ctx->start_time);
+#ifdef USE_PERF_MONITORING
+	svc_observe_application_begin(&reqdata->svc.rq_observation,
+		(uint64_t)op_ctx->start_time.tv_sec * 1000000000 +
+		op_ctx->start_time.tv_nsec);
+#endif
 
 	/* Initialized user_credentials */
 	init_credentials();

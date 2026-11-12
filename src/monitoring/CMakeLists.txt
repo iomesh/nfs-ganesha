@@ -7,6 +7,9 @@ SET(monitoring_SRCS
   observation_metrics.cc
 )
 
+if(USE_PERF_MONITORING)
+  list(APPEND monitoring_SRCS monitoring_config.c)
+endif()
 
 add_library(monitoring OBJECT ${monitoring_SRCS})
 add_sanitizers(monitoring)

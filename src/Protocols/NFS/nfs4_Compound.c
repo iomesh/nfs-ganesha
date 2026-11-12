@@ -41,7 +41,9 @@
 #include "nfs_proto_functions.h"
 #include "nfs_proto_tools.h"
 #include "server_stats.h"
-#include "observation_stats.h"
+#ifdef USE_PERF_MONITORING
+#include "monitoring.h"
+#endif
 #include "export_mgr.h"
 #include "nfs_creds.h"
 #include "pnfs_utils.h"
@@ -837,7 +839,7 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 	}
 
 	/* time each op */
-	observation_now(&data->op_start_time);
+	server_stats_start(&data->op_start_time);
 
 	if (data->minorversion > 0 && data->session != NULL &&
 	    data->session->fore_channel_attrs.ca_maxoperations ==
@@ -965,9 +967,11 @@ void complete_nfs4_compound(compound_data_t *data, int status,
 {
 	COMPOUND4res *res_compound4;
 
+
+
 	res_compound4 = &data->res->res_compound4_extended->res_compound4;
 
-	server_stats_compound_done(data->argarray_len, status);
+	server_stats_compound_done(data, data->argarray_len, status);
 
 	/* Complete the reply, in particular, tell where you stopped if
 	 * unsuccessful COMPOUD

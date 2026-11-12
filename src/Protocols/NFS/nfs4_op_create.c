@@ -48,6 +48,11 @@
 #include "nfs_convert.h"
 #include "nfs_file_handle.h"
 #include "export_mgr.h"
+#ifdef USE_PERF_MONITORING
+#include "monitoring.h"
+#include "monitoring_config.h"
+#include "observation_stats.h"
+#endif
 
 /**
  * @brief NFS4_OP_CREATE, creates a non-regular entry
@@ -235,6 +240,16 @@ enum nfs_req_result nfs4_op_create(struct nfs_argop4 *op, compound_data_t *data,
 		sattr.valid_mask |= ATTR_MODE;
 	}
 
+#ifdef USE_PERF_MONITORING
+	struct timespec fsal_started, fsal_completed;
+
+	const bool observe_fsal = monitoring_param.enabled &&
+		monitoring_param.stages && data->req->rq_observation.sampled;
+
+	if (observe_fsal)
+		observation_now(&fsal_started);
+#endif
+
 	fsal_status = fsal_create(obj_parent,
 				  arg_CREATE4->objname.utf8string_val,
 				  type,
@@ -244,6 +259,13 @@ enum nfs_req_result nfs4_op_create(struct nfs_argop4 *op, compound_data_t *data,
 				  NULL,
 				  &parent_pre_attrs,
 				  &parent_post_attrs);
+#ifdef USE_PERF_MONITORING
+	if (observe_fsal) {
+		observation_now(&fsal_completed);
+		monitoring_nfs4_create_fsal(data->minorversion,
+				  timespec_diff(&fsal_started, &fsal_completed));
+	}
+#endif
 
 	/* Release the attributes (may release an inherited ACL) */
 	fsal_release_attrs(&sattr);

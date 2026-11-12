@@ -95,6 +95,21 @@ void monitoring_nfs4_request(struct proto_op *statistics, bool sampled,
 			     struct gsh_client *client,
 			     struct gsh_export *exp);
 
+#ifdef USE_PERF_MONITORING
+void monitoring_protocol_done(struct svc_req *req, const struct timespec *completed);
+/* COMPOUND protocol interval: context-ready op_ctx->start_time to the
+ * original server_stats_compound_done completion. Includes async waits;
+ * excludes dispatch setup and reply preparation/encoding/send. Presence labels describe
+ * input operations, including operations skipped after an error. A mixed
+ * COMPOUND contributes one observation, regardless of repeated operations.
+ */
+void monitoring_nfs4_compound(const uint32_t minor_version,
+			    const nfs_argop4 *operations,
+			    const uint32_t operation_count,
+			    const nsecs_elapsed_t request_time);
+void monitoring_nfs4_create_fsal(const uint32_t minor_version,
+			      const nsecs_elapsed_t request_time);
+#endif
 
 void monitoring_nfs_io(const size_t bytes_requested,
 		       const size_t bytes_transferred,

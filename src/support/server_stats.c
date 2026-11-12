@@ -566,12 +566,30 @@ static struct _9p_stats *get_9p(struct gsh_stats *stats, pthread_rwlock_t *lock)
  * @param request_time [IN] time consumed by request
  * @param dup          [IN] detected this was a dup request
  */
+bool server_stats_sampled(void)
+{
+#ifdef USE_PERF_MONITORING
+	return op_ctx == NULL || op_ctx->req_type != NFS_REQUEST ||
+		op_ctx->flags.observation_sampled;
+#else
+	return true;
+#endif
+}
 
+void server_stats_start(struct timespec *timestamp)
+{
+	if (server_stats_sampled()) {
+		observation_now(timestamp);
+	} else {
+		*timestamp = (struct timespec){0};
+	}
+}
 
 void record_latency(struct proto_op *op, nsecs_elapsed_t request_time, bool dup)
 {
-	observation_latency(op, request_time, dup);
-
+	if (server_stats_sampled()) {
+		observation_latency(op, request_time, dup);
+	}
 }
 
 /**
@@ -589,7 +607,7 @@ void record_latency(struct proto_op *op, nsecs_elapsed_t request_time, bool dup)
 static void record_io(struct xfer_op *iop, size_t requested, size_t transferred,
 		      bool success)
 {
-	observation_count(&iop->cmd, success, false, true);
+	observation_count(&iop->cmd, success, false, server_stats_sampled());
 	if (success) {
 		(void)atomic_add_uint64_t(&iop->requested, requested);
 		(void)atomic_add_uint64_t(&iop->transferred, transferred);
@@ -659,7 +677,7 @@ static void record_io_stats(struct gsh_stats *gsh_st, pthread_rwlock_t *lock,
 static void record_op(struct proto_op *op, nsecs_elapsed_t request_time,
 		      bool success, bool dup)
 {
-	observation_record(op, request_time, success, dup, true);
+	observation_record(op, request_time, success, dup, server_stats_sampled());
 }
 
 /**
@@ -676,7 +694,7 @@ static void record_op(struct proto_op *op, nsecs_elapsed_t request_time,
 
 static void record_op_only(struct proto_op *op, bool success, bool dup)
 {
-	observation_count(op, success, dup, true);
+	observation_count(op, success, dup, server_stats_sampled());
 }
 
 static void record_clnt_ops(struct op_count *op, bool success, bool dup)
@@ -1344,9 +1362,13 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 		return;
 
 	now(&current_time);
-	observation_now(&completed);
-	time_diff = timespec_diff(&op_ctx->start_time, &completed);
-
+	if (server_stats_sampled()) {
+		observation_now(&completed);
+		time_diff = timespec_diff(&op_ctx->start_time, &completed);
+#ifdef USE_PERF_MONITORING
+		monitoring_protocol_done(req, &completed);
+#endif
+	}
 
 #ifdef _USE_NFS3
 	if (nfs_param.core_param.enable_FULLV3STATS)
@@ -1404,9 +1426,10 @@ void server_stats_nfsv4_op_done(compound_data_t *data,
 		return;
 
 	now(&current_time);
-	observation_now(&completed);
-	time_diff = timespec_diff(start_time, &completed);
-
+	if (server_stats_sampled()) {
+		observation_now(&completed);
+		time_diff = timespec_diff(start_time, &completed);
+	}
 
 	if (nfs_param.core_param.enable_FULLV4STATS)
 		record_v4_full_stats(data, time_diff, status);
@@ -1456,21 +1479,27 @@ void server_stats_nfsv4_op_done(compound_data_t *data,
  * Called from nfs4_compound at compound loop completion
  */
 
-void server_stats_compound_done(int num_ops, int status)
+void server_stats_compound_done(compound_data_t *data, int num_ops, int status)
 {
 	struct gsh_client *client = op_ctx->client;
 	struct timespec current_time;
 	struct timespec completed;
 	nsecs_elapsed_t time_diff = 0;
 
-
+#ifndef USE_PERF_MONITORING
+	(void)data;
+#endif
+	if (server_stats_sampled()) {
+		observation_now(&completed);
+		time_diff = timespec_diff(&op_ctx->start_time, &completed);
+#ifdef USE_PERF_MONITORING
+		monitoring_protocol_done(data->req, &completed);
+#endif
+	}
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
 	now(&current_time);
-	observation_now(&completed);
-	time_diff = timespec_diff(&op_ctx->start_time, &completed);
-
 
 	if (client != NULL) {
 		struct server_stats *server_st;
@@ -3083,7 +3112,7 @@ static void record_v3_full_stats(nfs_request_t *reqdata,
 			export_id = export->export_id;
 		in_addr_t server_addr =
 			get_ip_addr(svc_getrpclocal(req->rq_xprt));
-		monitoring_nfs3_request(&v3_full_stats[proc], true,
+		monitoring_nfs3_request(&v3_full_stats[proc], server_stats_sampled(),
 			proc, request_time, result, status,
 			export_id, fullpath, server_addr, client,
 			 op_ctx->ctx_export);
@@ -3120,7 +3149,7 @@ static void record_v4_full_stats(compound_data_t *data,
 	if (export != NULL)
 		export_id = export->export_id;
 	monitoring_nfs4_request(proc <= NFS_V42_NB_OPERATION ?
-		&v4_full_stats[proc] : NULL, true, proc, op_ctx->nfs_minorvers, request_time,
+		&v4_full_stats[proc] : NULL, server_stats_sampled(), proc, op_ctx->nfs_minorvers, request_time,
 			status, export_id, fullpath, server_addr, client,
 			      op_ctx->ctx_export);
 #endif

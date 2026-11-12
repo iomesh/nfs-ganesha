@@ -42,6 +42,8 @@
 
 #include <sys/types.h>
 
+void server_stats_start(struct timespec *timestamp);
+bool server_stats_sampled(void);
 
 void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup);
 
@@ -51,7 +53,7 @@ void server_stats_9p_done(u8 msgtype, struct _9p_request_data *req9p);
 
 void server_stats_io_done(size_t requested,
 			  size_t transferred, bool success, bool is_write);
-void server_stats_compound_done(int num_ops, int status);
+void server_stats_compound_done(compound_data_t *data, int num_ops, int status);
 void server_stats_nfsv4_op_done(compound_data_t *data,
 				struct timespec *start_time, int status);
 void server_stats_transport_done(struct gsh_client *client,
