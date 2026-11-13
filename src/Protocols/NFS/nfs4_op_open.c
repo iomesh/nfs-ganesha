@@ -35,6 +35,7 @@
 #include "config.h"
 #include "log.h"
 #include "fsal.h"
+#include "FSAL/fsal_commonlib.h"
 #include "nfs_core.h"
 #include "nfs_exports.h"
 #include "sal_functions.h"
@@ -747,6 +748,7 @@ static void open4_ex(OPEN4args *arg,
 	open_claim_type4 claim = arg->claim.claim;
 	fsal_verifier_t verifier;
 	struct fsal_attrlist sattr;
+	struct fsal_attrlist attrs_out = {0};
 	/* Status for fsal calls */
 	fsal_status_t status = {0, 0};
 	/* The open state for the file */
@@ -897,6 +899,15 @@ static void open4_ex(OPEN4args *arg,
 	if ((arg->share_deny & OPEN4_SHARE_DENY_WRITE) != 0)
 		openflags |= FSAL_O_DENY_WRITE_MAND;
 
+	/* Inspect attributes already returned by open2, not a separate GETATTR.
+	 * An existing OPEN state only verifies the request and returns no
+	 * attrs.
+	 */
+	if (createmode == FSAL_EXCLUSIVE_41) {
+		fsal_prepare_attrs(&attrs_out,
+				   ATTR_ATIME | ATTR_MTIME | ATTR_RDATTR_ERR);
+	}
+
 	/* Check if file_obj a REGULAR_FILE */
 	if (file_obj != NULL && file_obj->type != REGULAR_FILE) {
 		LogDebug(COMPONENT_NFS_V4,
@@ -998,7 +1009,8 @@ static void open4_ex(OPEN4args *arg,
 				    &sattr,
 				    verifier,
 				    &out_obj,
-				    NULL,
+				    attrs_out.request_mask != 0 ?
+					    &attrs_out : NULL,
 				    parent_pre_attrs,
 				    parent_post_attrs);
 
@@ -1186,10 +1198,26 @@ static void open4_ex(OPEN4args *arg,
 		file_obj->state_hdl->file.fdeleg_stats.fds_num_write_opens++;
 
 	do_delegation(arg, res_OPEN4, data, owner, *file_state, clientid);
+	/* Successful create/replay has already verified the request. Report
+	 * time attributes as verifier storage only when they match its
+	 * encoding. Missing attributes and coincidental matches keep the legacy
+	 * reply. Accept both full-width and legacy 31-bit timestamp encodings.
+	 */
+	if (res_OPEN4->status == NFS4_OK &&
+	    (attrs_out.valid_mask &
+	     (ATTR_ATIME | ATTR_MTIME | ATTR_RDATTR_ERR)) ==
+		(ATTR_ATIME | ATTR_MTIME) &&
+	    !check_verifier_attrlist(&attrs_out, verifier, false) &&
+	    !check_verifier_attrlist(&attrs_out, verifier, true)) {
+		clear_attribute_in_bitmap(attrset, FATTR4_TIME_ACCESS);
+		clear_attribute_in_bitmap(attrset, FATTR4_TIME_MODIFY);
+	}
+
  out:
 
 	/* Release the attributes (may release an inherited ACL) */
 	fsal_release_attrs(&sattr);
+	fsal_release_attrs(&attrs_out);
 
 	if (st_lock_held) {
 		STATELOCK_unlock(file_obj);

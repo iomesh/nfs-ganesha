@@ -427,9 +427,10 @@ fsal_status_t mdcache_open2(struct fsal_obj_handle *obj_hdl,
 		LogFullDebug(COMPONENT_MDCACHE,
 			     "Open2 of object succeeded.");
 		*new_obj = obj_hdl;
-		/* We didn't actually get any attributes, but release anyway
-		 * for code consistency.
-		 */
+		/* Preserve attributes the sub-FSAL returned for open/replay. */
+		if (attrs_out != NULL) {
+			fsal_copy_attrs(attrs_out, &attrs, false);
+		}
 		fsal_release_attrs(&attrs);
 		return status;
 	}
