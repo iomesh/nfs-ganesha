@@ -246,8 +246,9 @@ state_status_t state_nlm_share(struct fsal_obj_handle *obj,
 	if (openflags & FSAL_O_READ)
 		access_mask |= FSAL_READ_ACCESS;
 
+	/* Match OPEN: write share requires WRITE_DATA, not APPEND_DATA. */
 	if (openflags & FSAL_O_WRITE)
-		access_mask |= FSAL_WRITE_ACCESS;
+		access_mask |= FSAL_OPEN_WRITE_ACCESS;
 
 	/* The access check must be same as the read and write calls.
 	 * Use owner_skip for the access checks
