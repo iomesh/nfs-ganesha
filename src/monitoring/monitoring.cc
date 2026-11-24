@@ -393,6 +393,14 @@ void monitoring_init(const uint16_t port) {
   static bool initialised;
   if (initialised)
     return;
+#ifdef ENABLE_FAULT_INJECTION
+  /* Test build: prometheus::Exposer cannot add routes nor share its socket, so
+   * serve /metrics ourselves via our own civetweb on the SAME port, alongside
+   * the /debug/failpoints control endpoint. No sibling port is opened. */
+  registry = std::make_shared<prometheus::Registry>();
+  metrics.reset(new Metrics(*registry));
+  fault_control_start(port, registry);
+#else
   std::ostringstream ss;
   ss << "0.0.0.0:" << port;
   std::string hostPort = ss.str();
@@ -401,6 +409,7 @@ void monitoring_init(const uint16_t port) {
   registry = std::make_shared<prometheus::Registry>();
   exposer->RegisterCollectable(registry);
   metrics.reset(new Metrics(*registry));
+#endif  /* ENABLE_FAULT_INJECTION */
   initialised = true;
 }
 

@@ -45,6 +45,8 @@
 #include "nfs_proto_functions.h"
 #include "nfs_convert.h"
 #include "nfs_proto_tools.h"
+#include "fsal_convert.h"
+#include "fail_inject.h"
 
 /**
  *
@@ -74,6 +76,14 @@ int nfs3_getattr(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 			  "");
 
 	fsal_prepare_attrs(attrs, ATTRS_NFS3);
+
+	/* fault-injection seam: fail GETATTR with a chosen errno, e.g.
+	 *   PUT /debug/failpoints/nfs3.getattr -d 'return(5)'   (EIO)
+	 */
+	FAIL_POINT_RET("nfs3.getattr",
+		       (res->res_getattr3.status =
+			nfs3_Errno_status(posix2fsal_status(fi_errno)),
+			NFS_REQ_OK));
 
 	obj = nfs3_FhandleToCache(&arg->arg_getattr3.object,
 				    &res->res_getattr3.status,

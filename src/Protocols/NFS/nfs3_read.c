@@ -45,6 +45,8 @@
 #include "server_stats.h"
 #include "export_mgr.h"
 #include "sal_functions.h"
+#include "fsal_convert.h"
+#include "fail_inject.h"
 
 static void nfs_read_ok(nfs_res_t *res, char *data, uint32_t read_size,
 			struct fsal_obj_handle *obj, int eof)
@@ -294,6 +296,15 @@ int nfs3_read(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	res->res_read3.READ3res_u.resok.data.data_val = NULL;
 	res->res_read3.READ3res_u.resok.data.data_len = 0;
 	res->res_read3.status = NFS3_OK;
+
+	/* fault-injection seam: fail READ with a chosen errno, e.g.
+	 *   PUT /debug/failpoints/nfs3.read -d '10%return(5)'  (EIO, 10% of reads)
+	 */
+	FAIL_POINT_RET("nfs3.read",
+		       (res->res_read3.status =
+			nfs3_Errno_status(posix2fsal_status(fi_errno)),
+			NFS_REQ_OK));
+
 	obj = nfs3_FhandleToCache(&arg->arg_read3.file,
 				  &res->res_read3.status, &rc);
 

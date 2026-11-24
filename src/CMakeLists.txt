@@ -335,6 +335,86 @@ option(USE_CB_SIMULATOR "enable callback simulator thread" OFF)
 
 goption(USE_NFSIDMAP "Use of libnfsidmap for name resolution" ON)
 option(ENABLE_ERROR_INJECTION "enable error injection" OFF)
+option(ENABLE_FAULT_INJECTION "enable native fault injection (HTTP-controlled fail points)" OFF)
+if(ENABLE_FAULT_INJECTION)
+  # The fault control server reuses the civetweb HTTP engine that ships inside
+  # prometheus-cpp's monitoring stack (it also serves /metrics), so monitoring
+  # must be enabled.
+  if(NOT USE_MONITORING)
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION requires USE_MONITORING=ON: the /debug/failpoints "
+      "control server is built on the civetweb C API bundled with prometheus-cpp.")
+  endif(NOT USE_MONITORING)
+  # civetweb's C symbols (mg_start/mg_printf/...) are compiled into
+  # prometheus-cpp-pull but are NOT re-exported, so a standalone civetweb
+  # library is required.
+  # Fail here rather than deferring to an undefined-reference link error --
+  # and rather than the old WARNING, which let a broken configure sail on.
+  find_library(CIVETWEB_LIBRARY NAMES civetweb civetweb-c)
+  find_path(CIVETWEB_INCLUDE_DIR NAMES prometheus/civetweb.h)
+  if(NOT CIVETWEB_LIBRARY)
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION: no standalone civetweb library found. The "
+      "civetweb C symbols (mg_start/mg_printf/...) are not re-exported by "
+      "prometheus-cpp, so monitoring/fault_control.cc cannot link. Install "
+      "libcivetweb (or build it from the prometheus-cpp third-party tree).")
+  endif(NOT CIVETWEB_LIBRARY)
+  if(NOT CIVETWEB_INCLUDE_DIR)
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION: prometheus/civetweb.h not found; "
+      "monitoring/fault_control.cc includes it directly.")
+  endif(NOT CIVETWEB_INCLUDE_DIR)
+
+  # struct mg_request_info is not layout-stable: 1.15 inserted local_uri_raw
+  # ahead of local_uri, which fault_control.cc reads.  Against a pre-1.15
+  # header, the member fault_control.cc believes is local_uri lands on a
+  # different field of the newer struct -- in practice local_uri_raw, the
+  # *un-normalised* request target, which would hand the handler a path it
+  # thinks has already had "../" collapsed out of it.  So pin a floor on the
+  # header we just found.  fault_control.cc additionally cross-checks the
+  # linked library at runtime via mg_version().
+  file(STRINGS "${CIVETWEB_INCLUDE_DIR}/prometheus/civetweb.h"
+    _civetweb_major_line REGEX "^#define[ \t]+CIVETWEB_VERSION_MAJOR")
+  file(STRINGS "${CIVETWEB_INCLUDE_DIR}/prometheus/civetweb.h"
+    _civetweb_minor_line REGEX "^#define[ \t]+CIVETWEB_VERSION_MINOR")
+  string(REGEX MATCH "[0-9]+" _civetweb_major "${_civetweb_major_line}")
+  string(REGEX MATCH "[0-9]+" _civetweb_minor "${_civetweb_minor_line}")
+  if(_civetweb_major STREQUAL "" OR _civetweb_minor STREQUAL "")
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION: cannot read CIVETWEB_VERSION_MAJOR/MINOR from "
+      "${CIVETWEB_INCLUDE_DIR}/prometheus/civetweb.h; refusing to guess the "
+      "struct mg_request_info layout.")
+  endif()
+  math(EXPR _civetweb_version "${_civetweb_major} * 100 + ${_civetweb_minor}")
+  if(_civetweb_version LESS 115)
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION: civetweb "
+      "${_civetweb_major}.${_civetweb_minor} is too old; >= 1.15 is required "
+      "for the struct mg_request_info layout fault_control.cc depends on.")
+  endif()
+
+  # Prove the header and the library agree now, not at link time.
+  #
+  # check_symbol_exists() memoises into the CMake cache, so a re-configure that
+  # picks up a *different* CIVETWEB_LIBRARY (a rebuilt third-party tree, a newly
+  # installed system package) would otherwise reuse the previous run's verdict
+  # and never re-test the library it is actually about to link.  Drop the cached
+  # answer first so the check reruns whenever this block does.
+  include(CheckSymbolExists)
+  unset(HAVE_CIVETWEB_MG_START CACHE)
+  set(CMAKE_REQUIRED_INCLUDES ${CIVETWEB_INCLUDE_DIR})
+  set(CMAKE_REQUIRED_LIBRARIES ${CIVETWEB_LIBRARY})
+  check_symbol_exists(mg_start "prometheus/civetweb.h" HAVE_CIVETWEB_MG_START)
+  unset(CMAKE_REQUIRED_INCLUDES)
+  unset(CMAKE_REQUIRED_LIBRARIES)
+  if(NOT HAVE_CIVETWEB_MG_START)
+    message(FATAL_ERROR
+      "ENABLE_FAULT_INJECTION: ${CIVETWEB_LIBRARY} does not export mg_start; "
+      "the civetweb C symbols must be linkable for fault_control.cc.")
+  endif(NOT HAVE_CIVETWEB_MG_START)
+
+  set(FAULT_INJECTION_LIBRARIES ${CIVETWEB_LIBRARY})
+endif(ENABLE_FAULT_INJECTION)
 goption(ENABLE_VFS_POSIX_ACL "Enable NFSv4 to POSIX ACL mapping for VFS" OFF)
 option(ENABLE_VFS_DEBUG_ACL "Enable debug ACL store for VFS" OFF)
 option(ENABLE_RFC_ACL "Use all RFC ACL checks" OFF)
@@ -1344,6 +1424,7 @@ message(STATUS "USE_CB_SIMULATOR = ${USE_CB_SIMULATOR}")
 message(STATUS "USE_BTRFSUTIL = ${USE_BTRFSUTIL}")
 message(STATUS "USE_NFSIDMAP = ${USE_NFSIDMAP}")
 message(STATUS "ENABLE_ERROR_INJECTION = ${ENABLE_ERROR_INJECTION}")
+message(STATUS "ENABLE_FAULT_INJECTION = ${ENABLE_FAULT_INJECTION}")
 message(STATUS "ENABLE_VFS_POSIX_ACL = ${ENABLE_VFS_POSIX_ACL}")
 message(STATUS "ENABLE_VFS_DEBUG_ACL = ${ENABLE_VFS_DEBUG_ACL}")
 message(STATUS "ENABLE_RFC_ACL = ${ENABLE_RFC_ACL}")
@@ -1418,6 +1499,11 @@ set(_VALGRIND_MEMCHECK ${_VALGRIND_MEMCHECK}
 set(ENABLE_ERROR_INJECTION ${ENABLE_ERROR_INJECTION}
   CACHE BOOL
    "enable error injection"
+   FORCE)
+
+set(ENABLE_FAULT_INJECTION ${ENABLE_FAULT_INJECTION}
+  CACHE BOOL
+   "enable native fault injection"
    FORCE)
 
 set(ENABLE_VFS_POSIX_ACL ${ENABLE_VFS_POSIX_ACL}
@@ -1701,6 +1787,7 @@ target_link_libraries(ganesha.nfsd
   ${LTTNG_LIBRARIES}
   ${LDFLAG_DISALLOW_UNDEF}
   ${MONITORING_LIBRARIES}
+  ${FAULT_INJECTION_LIBRARIES}
   ${MINITRACE_LIBRARIES}
 )
 set_target_properties(ganesha.nfsd PROPERTIES COMPILE_FLAGS "-fPIC")

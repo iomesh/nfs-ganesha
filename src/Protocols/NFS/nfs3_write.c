@@ -47,6 +47,8 @@
 #include "server_stats.h"
 #include "export_mgr.h"
 #include "sal_functions.h"
+#include "fsal_convert.h"
+#include "fail_inject.h"
 
 struct nfs3_write_data {
 	/** Results for write */
@@ -261,6 +263,14 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	/* to avoid setting it on each error case */
 	resfail->file_wcc.before.attributes_follow = false;
 	resfail->file_wcc.after.attributes_follow = false;
+
+	/* fault-injection seam: fail WRITE with a chosen errno, e.g.
+	 *   PUT /debug/failpoints/nfs3.write -d 'return(28)'   (ENOSPC)
+	 */
+	FAIL_POINT_RET("nfs3.write",
+		       (res->res_write3.status =
+			nfs3_Errno_status(posix2fsal_status(fi_errno)),
+			NFS_REQ_OK));
 
 	obj = nfs3_FhandleToCache(&arg->arg_write3.file,
 				    &res->res_write3.status,

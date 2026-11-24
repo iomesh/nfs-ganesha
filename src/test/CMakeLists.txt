@@ -45,3 +45,16 @@ SET(test_url_regex_SRCS
   )
 add_executable(test_url_regex EXCLUDE_FROM_ALL ${test_url_regex_SRCS})
 target_link_libraries(test_url_regex ganesha_nfsd ${CMAKE_THREAD_LIBS_INIT})
+
+# The fault-injection action parser. Only meaningful where the seams exist at all, and the
+# assertions are about specs being REFUSED: the ones that used to be accepted could abort the
+# process or arm a fault other than the one asked for.
+if(ENABLE_FAULT_INJECTION)
+  # The test #includes ../support/fail_inject.c: its symbols are local to libganesha_nfsd, so
+  # they cannot be reached from outside it, and the parser under test needs no ganesha runtime.
+  SET(test_fail_inject_SRCS
+    test_fail_inject.c
+    )
+  add_executable(test_fail_inject EXCLUDE_FROM_ALL ${test_fail_inject_SRCS})
+  target_link_libraries(test_fail_inject ganesha_nfsd ${CMAKE_THREAD_LIBS_INIT})
+endif(ENABLE_FAULT_INJECTION)

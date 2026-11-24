@@ -44,6 +44,16 @@ namespace ganesha_monitoring {
 extern std::unique_ptr < prometheus::Exposer > exposer;
 extern std::shared_ptr < prometheus::Registry > registry;
 
+#ifdef ENABLE_FAULT_INJECTION
+/*
+ * Test builds only: start our own civetweb on @port serving BOTH /metrics
+ * (serialised from @registry) and /debug/failpoints (see fault_control.cc).
+ * Called from monitoring_init() in place of constructing a prometheus::Exposer.
+ */
+void fault_control_start(uint16_t port,
+			 std::shared_ptr < prometheus::Registry > registry);
+#endif  /* ENABLE_FAULT_INJECTION */
+
 }  /* namespace ganesha_monitoring */
 
 #endif  /* __cplusplus */
