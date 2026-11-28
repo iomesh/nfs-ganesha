@@ -197,6 +197,8 @@ static struct config_item core_params[] = {
 		       nfs_core_param, drop_inval_errors),
 	CONF_ITEM_BOOL("Drop_Delay_Errors", false,
 		       nfs_core_param, drop_delay_errors),
+	CONF_ITEM_BOOL("Enforce_Client_Owner_Source_IP", true,
+		       nfs_core_param, enforce_client_owner_source_ip),
 	CONF_ITEM_BOOL("DRC_Disabled", false,
 		       nfs_core_param, drc.disabled),
 	CONF_ITEM_UI32("DRC_TCP_Npart", 1, 20, DRC_TCP_NPART,

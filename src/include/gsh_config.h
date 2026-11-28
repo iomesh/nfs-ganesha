@@ -254,6 +254,8 @@ typedef struct nfs_core_param {
 	    retry and there is no NFSERR_DELAY, this seems like an
 	    excellent idea. */
 	bool drop_delay_errors;
+	/** Reject an active client owner when EXCHANGE_ID comes from another source IP. */
+	bool enforce_client_owner_source_ip;
 	/** Parameters controlling the Duplicate Request Cache.  */
 	struct {
 		/** Whether to disable the DRC entirely.  Defaults to
